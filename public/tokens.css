@@ -1,0 +1,192 @@
+/* Design tokens (Rack Suite). Every colour, radius, space and type size the app uses comes from here.
+   Theme: dark by default, light when the OS asks for it, or when <html data-theme="light|dark"> forces one
+   (app.js sets that from the sun/moon button). */
+
+/* ---- sizes, type (same in both themes) */
+:root {
+  --r-xs: 3px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 48px;
+
+  --control-h: 32px;
+
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+}
+@media (pointer: coarse) {
+  :root { --control-h: 44px; }
+}
+
+/* ---- neutrals */
+:root {
+  --ground: #202124;
+  --surface-sunken: #1b1c1f;
+  --surface: #292a2d;
+  --surface-raised: #303134;
+  --surface-track: #3c4043;
+  --hairline: #3c4043;
+  --border-control: #9aa0a6;
+  --ink: #e8eaed;
+  --ink-muted: #a9aeb4;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #f6f8fc;
+    --surface-sunken: #eef1f7;
+    --surface: #ffffff;
+    --surface-raised: #f1f4f9;
+    --surface-track: #e1e5ec;
+    --hairline: #e1e4ea;
+    --border-control: #7a8088;
+    --ink: #1f2329;
+    --ink-muted: #5f6368;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --ground: #f6f8fc;
+  --surface-sunken: #eef1f7;
+  --surface: #ffffff;
+  --surface-raised: #f1f4f9;
+  --surface-track: #e1e5ec;
+  --hairline: #e1e4ea;
+  --border-control: #7a8088;
+  --ink: #1f2329;
+  --ink-muted: #5f6368;
+  color-scheme: light;
+}
+
+/* ---- status: shared by every Rack Suite app, never changes with the accent */
+:root {
+  --success: #81c995;
+  --warning: #fdd663;
+  --danger: #f28b82;
+  --info: #8ab4f8;
+  --soft-a: 14%; /* strength of the -soft backgrounds */
+  --tint-hover: 8%; /* hover / pressed tint mixed into a fill */
+  --tint-press: 14%;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --success: #137333;
+    --warning: #8f5800;
+    --danger: #c5221f;
+    --info: #1967d2;
+    --soft-a: 10%;
+  }
+}
+:root[data-theme="light"] {
+  --success: #137333;
+  --warning: #8f5800;
+  --danger: #c5221f;
+  --info: #1967d2;
+  --soft-a: 10%;
+}
+:root {
+  --success-soft: color-mix(in srgb, var(--success) var(--soft-a), transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) var(--soft-a), transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) var(--soft-a), transparent);
+  --info-soft: color-mix(in srgb, var(--info) var(--soft-a), transparent);
+}
+
+/* ---- accent: turquoise. Swap this one block (three copies, one per theme case) to re-colour the app. */
+:root {
+  --accent: #3fd0c4;
+  --on-accent: #00201d;
+  --accent-text: #6fe0d5;
+  --accent-2: #a6ece5;
+  --accent-3: #2a9d93;
+  --accent-soft-a: 14%;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --accent: #00796f;
+    --on-accent: #ffffff;
+    --accent-text: #006158;
+    --accent-2: #2a9d93;
+    --accent-3: #7fcfc7;
+    --accent-soft-a: 12%;
+  }
+}
+:root[data-theme="light"] {
+  --accent: #00796f;
+  --on-accent: #ffffff;
+  --accent-text: #006158;
+  --accent-2: #2a9d93;
+  --accent-3: #7fcfc7;
+  --accent-soft-a: 12%;
+}
+:root {
+  --accent-soft: color-mix(in srgb, var(--accent) var(--accent-soft-a), transparent);
+}
+
+/* ---- VEX alliance colours: set by the game, so they never change with the accent.
+   Same hues as danger / info so they sit with the suite, but kept separate because they mean "red/blue alliance",
+   not "error/info". */
+:root {
+  --alliance-red: #f28b82;
+  --alliance-blue: #8ab4f8;
+  --on-alliance: #202124;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --alliance-red: #c5221f;
+    --alliance-blue: #1967d2;
+    --on-alliance: #ffffff;
+  }
+}
+:root[data-theme="light"] {
+  --alliance-red: #c5221f;
+  --alliance-blue: #1967d2;
+  --on-alliance: #ffffff;
+}
+:root {
+  --alliance-red-soft: color-mix(in srgb, var(--alliance-red) var(--soft-a), transparent);
+  --alliance-blue-soft: color-mix(in srgb, var(--alliance-blue) var(--soft-a), transparent);
+}
+
+/* ---- elevation: the floating tab bar, a dragged picklist row, the dimmed page behind the team sheet */
+:root {
+  --shadow-float: 0 2px 10px rgba(0, 0, 0, 0.35);
+  --shadow-drag: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --scrim: rgba(0, 0, 0, 0.6);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --shadow-float: 0 2px 10px rgba(31, 35, 41, 0.1);
+    --shadow-drag: 0 6px 18px rgba(31, 35, 41, 0.18);
+    --scrim: rgba(31, 35, 41, 0.45);
+  }
+}
+:root[data-theme="light"] {
+  --shadow-float: 0 2px 10px rgba(31, 35, 41, 0.1);
+  --shadow-drag: 0 6px 18px rgba(31, 35, 41, 0.18);
+  --scrim: rgba(31, 35, 41, 0.45);
+}
+
+/* ---- the Invictus logo comes in a light (white) and a dark version */
+:root {
+  --logo-on-dark: block;
+  --logo-on-light: none;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --logo-on-dark: none;
+    --logo-on-light: block;
+  }
+}
+:root[data-theme="light"] {
+  --logo-on-dark: none;
+  --logo-on-light: block;
+}

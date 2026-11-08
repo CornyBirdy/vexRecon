@@ -180,7 +180,7 @@ function setStatus() {
 let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 5000) }
 
-const loginHTML = () => `<div class="card"><h2>Team code</h2><p class="mut">Enter the team code to open Invictus scouting.</p><input id="codein" type="password" autocomplete="current-password" placeholder="Team code">${loginErr ? '<p style="color:var(--rd)">That code didn’t work.</p>' : ''}<button data-act="login">Open</button></div>`;
+const loginHTML = () => `<div class="card"><h2>Team code</h2><p class="mut">Enter the team code to open Invictus scouting.</p><input id="codein" type="password" autocomplete="current-password" placeholder="Team code">${loginErr ? '<p style="color:var(--danger)">That code didn’t work.</p>' : ''}<button data-act="login">Open</button></div>`;
 
 async function init() {
   const c = lsJ('cache');
@@ -222,7 +222,7 @@ function noteBox(kind, ref, sec, ph) {
 }
 const when = ts => new Date(ts).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
 const noteRow = n => `<div class="note">${esc(n.text)}<small>${esc(n.by || '?')} · ${when(n.ts)} <button class="d" data-act="delnote" data-id="${n.id}">delete</button></small></div>`;
-const nameChips = () => NAMES.map(n => `<button class="chip ${name === n ? 'me' : ''}" data-act="setname" data-v="${esc(n)}">${esc(n)}</button>`).join('');
+const nameChips = () => NAMES.map(n => `<button class="chip ${name === n ? 'on' : ''}" data-act="setname" data-v="${esc(n)}">${esc(n)}</button>`).join('');
 
 function vEvent() {
   const e = evObj(), c = cfg();
@@ -280,7 +280,7 @@ function vMatches() {
     const s = side(m), o = open[m.id];
     let res = '';
     if (s && scored(m)) { const a = s === 'red' ? m.rs : m.bs, b = s === 'red' ? m.bs : m.rs; res = a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }
-    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" data-act="mopen" data-id="${m.id}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${m.rs}–${m.bs}</span>` : ''}${res}<span class="grow"></span>${s ? `<span class="tag" style="background:${s === 'red' ? 'var(--rd)' : 'var(--ac)'}">We’re ${s}</span>` : ''}<span aria-hidden="true">${o ? '▲' : '▼'}</span></div>
+    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" data-act="mopen" data-id="${m.id}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${m.rs}–${m.bs}</span>` : ''}${res}<span class="grow"></span>${s ? `<span class="tag ${s}">We’re ${s}</span>` : ''}<span aria-hidden="true">${o ? '▲' : '▼'}</span></div>
     <div class="vs"><div class="side r"><span>Red alliance</span>${chips(m, m.red)}</div><div class="side b"><span>Blue alliance</span>${chips(m, m.blue)}</div></div>
     ${o ? (s ? `<h3>Strategy</h3>${noteBox('match', m.id, 'strat', 'Our strategy for this match…')}<h3>Our alliance</h3>${noteBox('match', m.id, 'ally', 'What our partner said / their plan…')}<h3>Opposition</h3>${noteBox('match', m.id, 'opp', 'Weaknesses, tendencies…')}`
         : `<h3>Notes</h3>${noteBox('match', m.id, 'gen', 'What happened in this match…')}`) + `<button class="d" data-act="clearmatch" data-id="${m.id}">Clear all notes for this match</button> <button class="d" data-act="delmatch" data-id="${m.id}">Delete match</button>` : ''}</div>`
@@ -301,7 +301,7 @@ function vScout() {
     const d = draft, tms = ms.filter(m => m.red.includes(scTeam) || m.blue.includes(scTeam));
     const rel = m => { const s = side(m, scTeam); return s === 'ally' ? ' · with us' : s === 'opp' ? ' · against us' : '' };
     return `<p><button class="g" data-act="donescout">‹ Back to teams</button></p>
-    <div class="card" style="border:2px solid var(--ac)"><h2><span class="num">${scTeam}</span> ${esc(tName(scTeam))}</h2>
+    <div class="card" style="border:2px solid var(--accent)"><h2><span class="num">${scTeam}</span> ${esc(tName(scTeam))}</h2>
     <h3>What are you scouting?</h3><select id="scm"><option value="">Overall / pit scouting (not one match)</option>${tms.map(m => `<option value="${esc(m.id)}" ${d.match === m.id ? 'selected' : ''}>Match ${esc(m.label)}${rel(m)}${scored(m) ? ' · played' : ''}</option>`).join('')}</select>
     <div class="rem">Remember to note: autonomous points & consistency · driver skill & consistency · robot type & design · speed · scoring · consistency · durability · overall.</div>
     <h3>Autonomous</h3><input data-f="autoPts" value="${esc(d.autoPts)}" placeholder="Auto points they score"><div class="mut">Auto consistency</div>${R('autoCons', d.autoCons)}<textarea data-f="autoNotes" placeholder="What does their auto do?">${esc(d.autoNotes)}</textarea>
@@ -322,7 +322,7 @@ function vScout() {
   const rel = n => { const a = [], o = []; ms.forEach(x => { const s = side(x, n); if (n === US || !s) return; (s === 'ally' ? a : o).push(x.label.replace(/^Mock /, '')) }); return { a, o } };
   return `<div class="card"><h2>Pick a team to scout</h2><p class="mut">Scouting as <b>${esc(name)}</b> <button class="d" data-act="setname" data-v="">change</button></p><p class="mut">Green = we play with them · Red = we play against them · Half and half = both</p>${teams().filter(t => t.number !== US).map(t => {
     const r = rel(t.number), c = r.a.length && !r.o.length ? 'gn' : r.o.length && !r.a.length ? 'rd' : r.a.length && r.o.length ? 'both' : '', mine = myScouts(t.number).length;
-    return `<div class="trow ${scTeam === t.number ? 'sel' : ''}" data-act="startscout" data-t="${t.number}"><span class="chip ${c}">${t.number}</span><div style="flex:1"><div>${esc(t.name)}</div>${mine ? `<div class="lab" style="color:var(--ac)">✓ You’ve scouted this${mine > 1 ? ' (' + mine + ' entries)' : ''}</div>` : ''}${r.a.length ? `<div class="lab g">With us: ${r.a.join(', ')}</div>` : ''}${r.o.length ? `<div class="lab r">Against us: ${r.o.join(', ')}</div>` : ''}${!r.a.length && !r.o.length ? '<span class="mut">Not in a match with us</span>' : ''}</div></div>`
+    return `<div class="trow ${scTeam === t.number ? 'sel' : ''}" data-act="startscout" data-t="${t.number}"><span class="chip ${c}">${t.number}</span><div style="flex:1"><div>${esc(t.name)}</div>${mine ? `<div class="lab" style="color:var(--accent-text)">✓ You’ve scouted this${mine > 1 ? ' (' + mine + ' entries)' : ''}</div>` : ''}${r.a.length ? `<div class="lab g">With us: ${r.a.join(', ')}</div>` : ''}${r.o.length ? `<div class="lab r">Against us: ${r.o.join(', ')}</div>` : ''}${!r.a.length && !r.o.length ? '<span class="mut">Not in a match with us</span>' : ''}</div></div>`
   }).join('') || '<span class="mut">Add teams first.</span>'}</div>`;
 }
 function newDraft(t, matchId) {
@@ -362,7 +362,7 @@ function vTeam(num) {
 function vPick() {
   const e = evObj(); if (!e) return '<p class="mut">Pick an event first.</p>';
   const p = e.picks || [], avail = teams().filter(t => t.number !== US && !p.includes(t.number));
-  return `<div class="card"><h2>Finals picklist</h2><p class="mut">Hold the ≡ handle and drag to reorder, or use the arrows. #1 is who we want most.</p><div id="pklist">${p.map((n, i) => `<div class="pk" data-i="${i}"><span class="grip" title="Drag to reorder">≡</span><span class="num" style="width:34px;color:var(--ac)">${i + 1}</span><div style="flex:1;cursor:pointer" data-act="team" data-t="${n}"><span class="num">${n}</span>${esc(tName(n))}<div class="mut">${(r => r ? 'Rank ' + (r.rank ?? '–') + ' · OPR ' + f1(r.opr) + ' · ' : '')(stats().by.get(n))}${notes('req', n).length ? 'Asked to ally · ' : ''}${notes('scout', n).length} scouting entries</div></div><span class="arrows"><button class="g" data-act="pup" data-i="${i}" aria-label="Move up" ${i ? '' : 'disabled'}>▲</button><button class="g" data-act="pdn" data-i="${i}" aria-label="Move down" ${i < p.length - 1 ? '' : 'disabled'}>▼</button></span><button class="d" data-act="prm" data-i="${i}">Remove</button></div>`).join('') || '<p class="mut">Nothing yet. Tap a team below to add it.</p>'}</div></div>
+  return `<div class="card"><h2>Finals picklist</h2><p class="mut">Hold the ≡ handle and drag to reorder, or use the arrows. #1 is who we want most.</p><div id="pklist">${p.map((n, i) => `<div class="pk" data-i="${i}"><span class="grip" title="Drag to reorder">≡</span><span class="num" style="width:34px;color:var(--accent-text)">${i + 1}</span><div style="flex:1;cursor:pointer" data-act="team" data-t="${n}"><span class="num">${n}</span>${esc(tName(n))}<div class="mut">${(r => r ? 'Rank ' + (r.rank ?? '–') + ' · OPR ' + f1(r.opr) + ' · ' : '')(stats().by.get(n))}${notes('req', n).length ? 'Asked to ally · ' : ''}${notes('scout', n).length} scouting entries</div></div><span class="arrows"><button class="g" data-act="pup" data-i="${i}" aria-label="Move up" ${i ? '' : 'disabled'}>▲</button><button class="g" data-act="pdn" data-i="${i}" aria-label="Move down" ${i < p.length - 1 ? '' : 'disabled'}>▼</button></span><button class="d" data-act="prm" data-i="${i}">Remove</button></div>`).join('') || '<p class="mut">Nothing yet. Tap a team below to add it.</p>'}</div></div>
   <div class="card"><h2>Still to pick</h2><p class="mut">Tap a team to add it to the list.</p>${avail.map(t => `<button class="chip" data-act="addpick" data-t="${t.number}">${t.number}</button>`).join('') || '<span class="mut">Every team is on the list.</span>'}</div>`;
 }
 const setPicks = p => upd('events', ev, { picks: p });
