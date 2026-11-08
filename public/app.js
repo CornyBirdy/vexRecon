@@ -191,7 +191,7 @@ const EYE_OFF = '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0
 let wmode = ls('code') ? 'join' : (ls('wmode') || 'join'), wlook = null, wcreated = null, wbusy = false;
 const credit = () => `<div class="credit"><span>Made by</span><img class="on-light" src="logo.svg" alt="Invictus 52111A"><img class="on-dark" src="logo-light.svg" alt="Invictus 52111A"></div>`;
 function loginHTML() {
-  let h = `<div class="welcome"><div class="hero"><img class="heroicon" src="icon.svg" alt=""><h1>Recon</h1><p class="mut">Scouting for VEX V5 teams. Your whole team scouts together, live, even on bad venue wifi.</p></div>`;
+  let h = `<div class="welcome"><div class="hero"><img class="heroicon" src="icon.svg" alt=""><h1>${$('.wordmark').innerHTML}</h1><p class="mut">Scouting for VEX V5 teams. Your whole team scouts together, live, even on bad venue wifi.</p></div>`;
   if (wcreated) return h + `<div class="card"><h2>Team ${esc(wcreated.team.number)} is set up</h2><p class="mut">${esc(wcreated.team.name)}${wcreated.team.org ? ' · ' + esc(wcreated.team.org) : ''}</p>
     <h3>Your team code</h3><div class="bigcode">${esc(wcreated.code)}</div>
     <p class="mut">Share it with your team: they open Recon, tap <b>Join your team</b> and enter ${esc(wcreated.team.number)} and this code. You can find it again in Team settings.</p>
@@ -254,6 +254,7 @@ const fresh = n => seenNotes && !seenNotes.has(n.id) ? 'fresh' : '';
 
 function render() {
   if (dragging) { dirty = true; return }
+  document.body.classList.toggle('out', !code);
   if (!code) { $('#nav').innerHTML = ''; $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Welcome'; lastView = ''; return }
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { dirty = true; return }
   dirty = false;
