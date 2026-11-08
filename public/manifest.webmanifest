@@ -1,6 +1,6 @@
 {
-  "name": "Invictus 52111A Scouting",
-  "short_name": "Scouting",
+  "name": "Recon \u2013 VEX Scouting",
+  "short_name": "Recon",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#202124",
@@ -36,5 +36,6 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "description": "Scouting for VEX V5 teams. Made by Invictus 52111A."
 }

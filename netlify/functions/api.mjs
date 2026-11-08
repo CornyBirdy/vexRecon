@@ -1,4 +1,5 @@
 import { getStore } from "@netlify/blobs";
+import { randomBytes, scryptSync, timingSafeEqual, randomInt } from "node:crypto";
 
 const COLS = ["events", "teams", "matches", "notes", "config", "rankings"];
 const IDOK = /^[A-Za-z0-9_.\-]{1,200}$/;
@@ -66,15 +67,99 @@ async function rankDoc(eid, reid, divs) {
   return ["rankings/" + eid, { eventId: eid, list, t: Date.now() }];
 }
 
+// ---------- teams ----------
+// Every team gets its own private store. The registry ("teams" store) holds each team's number, name and a salted
+// hash of its team code. Team codes are generated (XXXX-XXXX, no look-alike characters) and only ever shown once,
+// to the person who set the team up, or when someone makes a new one in Team settings.
+const TEAM_NUM = /^[0-9]{1,6}[A-Z]?$/;
+const ALPHA = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+const tid = (n) => String(n || "").trim().toUpperCase().replace(/\s+/g, "");
+const newCode = () => Array.from({ length: 8 }, (_, i) => ALPHA[randomInt(ALPHA.length)] + (i === 3 ? "-" : "")).join("");
+const normCode = (c) => String(c || "").toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/^(.{4})(.{4})$/, "$1-$2");
+function hashCode(code) { const salt = randomBytes(16).toString("hex"); return { salt, hash: scryptSync(code, salt, 32).toString("hex") }; }
+function checkCode(code, rec) { const h = scryptSync(code, rec.salt, 32); const want = Buffer.from(rec.hash, "hex"); return h.length === want.length && timingSafeEqual(h, want); }
+const registry = () => getStore({ name: "teams", consistency: "strong" });
+const pub = (rec) => ({ number: rec.number, name: rec.name || "", org: rec.org || "" });
+
+// The original single-team install (Invictus 52111A, data in the "scout" store, code in TEAM_CODE) is adopted as a
+// team the first time it signs in, so its data carries over untouched.
+const LEGACY_TEAM = () => tid(Netlify.env.get("LEGACY_TEAM") || "52111A");
+
+async function lookupTeam(number) {
+  const key = Netlify.env.get("ROBOTEVENTS_KEY");
+  if (!key) return null; // local preview without a key: skip the check
+  const j = await re("/teams?number%5B%5D=" + encodeURIComponent(number));
+  const list = (j.data || []).filter((t) => tid(t.number) === number);
+  const t = list.find((x) => x.program && x.program.code === "V5RC") || list[0];
+  return t ? { number, name: t.team_name || "", org: t.organization || "", program: (t.program && t.program.code) || "" } : false;
+}
+
+// returns { rec, store } or a Response to send back
+async function auth(req) {
+  const number = tid(req.headers.get("x-team")), code = req.headers.get("x-code") || "";
+  if (!TEAM_NUM.test(number) || !code) return json({ error: "Wrong team or code" }, 401);
+  const reg = registry();
+  const fails = (await reg.get("_fail_" + number, { type: "json" })) || { n: 0, t: 0 };
+  if (fails.n >= 10 && Date.now() - fails.t < 10 * 60000) return json({ error: "Too many wrong codes. Try again in a few minutes." }, 429);
+  let rec = await reg.get(number, { type: "json" });
+  if (!rec && number === LEGACY_TEAM() && Netlify.env.get("TEAM_CODE") && same(code, Netlify.env.get("TEAM_CODE"))) {
+    rec = { number, name: Netlify.env.get("LEGACY_TEAM_NAME") || "Invictus", org: "", store: "scout", norm: false, created: Date.now(), ...hashCode(code) };
+    await reg.setJSON(number, rec);
+  }
+  if (!rec || !checkCode(rec.norm === false ? code : normCode(code), rec)) {
+    await reg.setJSON("_fail_" + number, { n: Date.now() - fails.t < 10 * 60000 ? fails.n + 1 : 1, t: Date.now() });
+    return json({ error: "Wrong team or code" }, 401);
+  }
+  if (fails.n) await reg.delete("_fail_" + number);
+  return { rec, reg, store: getStore({ name: rec.store, consistency: "strong" }) };
+}
+
 export default async (req) => {
-  const CODE = Netlify.env.get("TEAM_CODE");
-  if (!CODE || !same(req.headers.get("x-code"), CODE)) return json({ error: "Wrong code" }, 401);
-  const store = getStore({ name: "scout", consistency: "strong" });
   const path = new URL(req.url).pathname.replace(/^\/api/, "");
+
+  // ---- open endpoints: look a team up, set a new team up, admin ----
+  if (path === "/lookup" || path === "/register" || path === "/admin") {
+    try {
+      const body = req.method === "POST" ? await req.json() : {};
+      const reg = registry();
+      if (path === "/admin") { // owner-only: reset a team's code or remove it (for squatted team numbers)
+        const ADMIN = Netlify.env.get("ADMIN_CODE");
+        if (!ADMIN || !same(body.adminCode, ADMIN)) return json({ error: "Wrong admin code" }, 401);
+        const number = tid(body.team), rec = await reg.get(number, { type: "json" });
+        if (!rec) return json({ error: "No such team" }, 404);
+        if (body.action === "reset") { const code = newCode(); await reg.setJSON(number, { ...rec, norm: true, ...hashCode(code) }); return json({ ok: true, code }); }
+        if (body.action === "remove") { await reg.delete(number); return json({ ok: true }); } // the team's data store is left in place
+        return json({ error: "Unknown action" }, 400);
+      }
+      const number = tid(body.team);
+      if (!TEAM_NUM.test(number)) return json({ error: "That doesn't look like a VEX team number (e.g. 52111A)" }, 400);
+      const taken = !!(await reg.get(number, { type: "json" })) || (number === LEGACY_TEAM() && !!Netlify.env.get("TEAM_CODE"));
+      const info = await lookupTeam(number);
+      if (info === false) return json({ error: "No VEX team " + number + " on VEX Events" }, 404);
+      if (path === "/lookup") return json({ team: info || { number, name: "", org: "" }, taken });
+      if (taken) return json({ error: "Team " + number + " is already set up on Recon. Ask a teammate for your team code." }, 409);
+      const code = newCode();
+      const rec = { number, name: (info && info.name) || String(body.name || "").slice(0, 60), org: (info && info.org) || "", store: "team-" + number.toLowerCase(), norm: true, created: Date.now(), ...hashCode(code) };
+      await reg.setJSON(number, rec);
+      return json({ ok: true, team: pub(rec), code });
+    } catch (err) {
+      return json({ error: String(err.message || err) }, 500);
+    }
+  }
+
+  const a = await auth(req);
+  if (a instanceof Response) return a;
+  const { rec, reg, store } = a;
   const bump = () => store.setJSON("_v", { v: Date.now() });
 
   try {
-    if (path === "/login") return json({ ok: true });
+    if (path === "/login") return json({ ok: true, team: pub(rec) });
+
+    if (path === "/rotate") { // make a new team code; the old one stops working
+      const code = newCode();
+      await reg.setJSON(rec.number, { ...rec, norm: true, ...hashCode(code) });
+      return json({ ok: true, code });
+    }
 
     if (path === "/version") {
       const x = await store.get("_v", { type: "json" });

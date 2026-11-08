@@ -1,5 +1,5 @@
 'use strict';
-// Invictus scouting – client.
+// Recon – client. Made by Invictus 52111A.
 // Data lives on the server (netlify/functions/api.mjs). Every change is applied locally straight away,
 // queued in an outbox (kept in localStorage) and sent when there is a connection, so the app keeps
 // working on bad venue wifi. The last downloaded state is cached so the app also opens offline.
@@ -12,9 +12,9 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
 const slug = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-// Defaults until the team saves its own in Settings (Event tab).
-const DEFAULT_US = '52111A', DEFAULT_NAMES = ['Charlie', 'Oscar', 'Aidin', 'Seb', 'J-Pup'];
-let US = DEFAULT_US, NAMES = DEFAULT_NAMES;
+const APP = { name: 'Recon', version: '1.0.0' };
+// Signed in as one team: its number is "us" everywhere. Scout names are the team's own list (Team settings).
+let US = '', NAMES = [];
 const COLS = ['events', 'teams', 'matches', 'notes', 'config', 'rankings'];
 let S = { events: [], teams: [], matches: [], notes: [], config: [], rankings: [] };
 let ev = ls('ev'), tab = ls('tab') || 'event', name = ls('name'), mf = ls('mf') || 'ours', tv = ls('tv') || 'list', rks = ls('rks') || 'rank';
@@ -85,15 +85,20 @@ const NOTE_MS = 3000, RE_MS = 15000; // how often to check for teammates' change
 const API = '/api';
 class NetErr extends Error {}
 class AuthErr extends Error {}
-let code = ls('code'), pollT, impT, lastV = -1, loginErr = false, online = true, lastSync = 0;
+let code = ls('code'), team = ls('team'), teamInfo = lsJ('teamInfo') || {}, pollT, impT, lastV = -1, loginErr = false, online = true, lastSync = 0;
 let outbox = lsJ('outbox') || [], inflight = null, flushing = false, polling = false, syncing = false, editSeq = 0;
 const skuOf = e => (e && e.sku) || ((e && e.link || '').match(/RE-[A-Z0-9]+-\d+-\d+/) || [])[0] || '';
 
 async function api(path, body) {
   let r;
-  try { r = await fetch(API + path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', 'x-code': code }, body: body ? JSON.stringify(body) : undefined }) }
+  try { r = await fetch(API + path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', 'x-team': team, 'x-code': code }, body: body ? JSON.stringify(body) : undefined }) }
   catch (e) { throw new NetErr('No connection') }
-  if (r.status === 401) { code = ''; ls('code', ''); loginErr = true; render(); throw new AuthErr('Wrong code') }
+  if (r.status === 401 || r.status === 429) {
+    const j = await r.json().catch(() => ({}));
+    if (code && path !== '/login') { code = ''; ls('code', ''); loginErr = 'That team code no longer works. Ask a teammate for the new one.'; schedule(); render(); setStatus() }
+    else loginErr = j.error || 'That team number and code don’t match.';
+    throw new AuthErr(loginErr);
+  }
   const j = await r.json().catch(() => ({}));
   if (r.status >= 500) throw new NetErr(j.error || ('Server error ' + r.status));
   if (!r.ok) throw new Error(j.error || ('Error ' + r.status));
@@ -182,9 +187,39 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.ad
 
 const EYE = '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYE_OFF = '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.7-1.3M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
-const loginHTML = () => `<div class="card login"><h2>Team code</h2><p class="mut">Enter the team code to open Invictus scouting.</p><div class="pw"><input id="codein" type="password" autocomplete="current-password" placeholder="Team code" aria-label="Team code"><button type="button" class="icon" data-act="peek" aria-label="Show code" aria-pressed="false">${EYE}</button></div>${loginErr ? '<p class="err">That code didn’t work.</p>' : ''}<button class="p wide" data-act="login">Open</button></div>`;
+// ---------- welcome: join a team or set a new one up ----------
+let wmode = ls('code') ? 'join' : (ls('wmode') || 'join'), wlook = null, wcreated = null, wbusy = false;
+const credit = () => `<div class="credit"><span>Made by</span><img class="on-light" src="logo.svg" alt="Invictus 52111A"><img class="on-dark" src="logo-light.svg" alt="Invictus 52111A"></div>`;
+function loginHTML() {
+  let h = `<div class="welcome"><div class="hero"><img class="heroicon" src="icon.svg" alt=""><h1>Recon</h1><p class="mut">Scouting for VEX V5 teams. Your whole team scouts together, live, even on bad venue wifi.</p></div>`;
+  if (wcreated) return h + `<div class="card"><h2>Team ${esc(wcreated.team.number)} is set up</h2><p class="mut">${esc(wcreated.team.name)}${wcreated.team.org ? ' · ' + esc(wcreated.team.org) : ''}</p>
+    <h3>Your team code</h3><div class="bigcode">${esc(wcreated.code)}</div>
+    <p class="mut">Share it with your team: they open Recon, tap <b>Join your team</b> and enter ${esc(wcreated.team.number)} and this code. You can find it again in Team settings.</p>
+    <div class="foot"><button data-act="wcopy">Copy code</button><button class="p" data-act="wdone">Start scouting</button></div></div>` + credit() + '</div>';
+  h += segBar([['join', 'Join your team'], ['create', 'Set up a new team']], wmode, 'wmode');
+  const err = loginErr ? `<p class="err">${esc(loginErr)}</p>` : '';
+  if (wmode === 'join') h += `<div class="card login"><h2>Join your team</h2><p class="mut">Enter your team number and the team code a teammate gave you.</p>
+    <input id="w_team" value="${esc(team)}" placeholder="Team number, e.g. 52111A" autocapitalize="characters" autocomplete="organization" aria-label="Team number">
+    <div class="pw"><input id="codein" type="password" autocomplete="current-password" placeholder="Team code" aria-label="Team code"><button type="button" class="icon" data-act="peek" aria-label="Show code" aria-pressed="false">${EYE}</button></div>${err}<button class="p wide" data-act="login" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Opening…' : 'Open'}</button></div>`;
+  else {
+    h += `<div class="card login"><h2>Set up a new team</h2><p class="mut">One person sets the team up, then shares the team code with everyone else.</p>
+    <div class="row"><input id="w_new" value="${esc(wlook ? wlook.team.number : '')}" placeholder="Team number, e.g. 52111A" autocapitalize="characters" aria-label="Team number"><button data-act="wlookup" ${wbusy ? 'disabled' : ''}>Find team</button></div>${err}`;
+    if (wlook) h += wlook.taken
+      ? `<div class="found"><b>${esc(wlook.team.number)}</b> ${esc(wlook.team.name)}<div class="mut">Already on Recon. Ask a teammate for your team code, then join.</div></div><button class="wide" data-act="wmode" data-v="join">Join ${esc(wlook.team.number)} instead</button>`
+      : `<div class="found"><b>${esc(wlook.team.number)}</b> ${esc(wlook.team.name) || ''}<div class="mut">${esc(wlook.team.org) || (wlook.team.name ? '' : 'Couldn’t check VEX Events, so make sure the number is right.')}</div></div><button class="p wide" data-act="wregister" ${wbusy ? 'disabled' : ''}>Set up team ${esc(wlook.team.number)}</button>`;
+    h += '</div>';
+  }
+  return h + credit() + '</div>';
+}
+// signing in as a different team than last time: drop that team's cached data and unsent changes
+function useTeam(t, info) {
+  if (ls('lastTeam') !== t) { outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; ev = ''; ls('ev', ''); name = ''; ls('name', ''); lastV = -1; loaded = false }
+  team = t; teamInfo = info || {}; ls('team', t); ls('lastTeam', t); lsJ('teamInfo', teamInfo);
+}
 
 async function init() {
+  // phones signed in to the original single-team app (before Recon had teams) were all Invictus 52111A
+  if (code && !team) { team = '52111A'; ls('team', team); ls('lastTeam', team) }
   const c = lsJ('cache');
   if (code && c && c.S) { for (const k of COLS) S[k] = c.S[k] || []; for (const o of outbox) applyOp(o); lastSync = c.t || 0; loaded = true; if (!ev && S.events.length) ev = S.events[0].id }
   render(); setStatus();
@@ -219,13 +254,13 @@ const fresh = n => seenNotes && !seenNotes.has(n.id) ? 'fresh' : '';
 
 function render() {
   if (dragging) { dirty = true; return }
-  if (!code) { $('#nav').innerHTML = ''; $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Team login'; lastView = ''; return }
+  if (!code) { $('#nav').innerHTML = ''; $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Welcome'; lastView = ''; return }
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { dirty = true; return }
   dirty = false;
-  US = norm(cfg().us) || DEFAULT_US;
-  NAMES = Array.isArray(cfg().names) && cfg().names.length ? cfg().names : DEFAULT_NAMES;
+  US = norm(team);
+  NAMES = Array.isArray(cfg().names) ? cfg().names : [];
   if (loaded && name && !NAMES.includes(name)) { name = ''; ls('name', '') }
-  $('#evname').textContent = evObj() ? evObj().name : 'Choose an event to start';
+  $('#evname').textContent = [US + (teamInfo.name ? ' ' + teamInfo.name : ''), evObj() ? evObj().name : ''].filter(Boolean).join(' · ');
   // the tab bar is built once and only its classes change, so the selected tab can ease across
   const nav = $('#nav');
   if (!nav.children.length) nav.innerHTML = TABS.map(t => `<button data-act="tab" data-v="${t[0]}">${t[1]}<span>${t[2]}</span></button>`).join('');
@@ -236,7 +271,7 @@ function render() {
   if (same) flipPlay(before); else if (lastView && !reduced()) replay($('#app'), 'enter');
   lastView = key; justOpened = null;
   const md = $('#modal');
-  $('#mbody').innerHTML = mTeam ? vTeam(mTeam) : '';
+  $('#mbody').innerHTML = mTeam === ':about' ? vAbout() : mTeam ? vTeam(mTeam) : '';
   if (mTeam && !modalShown) { md.style.display = 'block'; if (!reduced()) replay(md, 'opening') }
   else if (!mTeam) md.style.display = 'none';
   modalShown = !!mTeam;
@@ -272,22 +307,41 @@ const nameChips = () => NAMES.map(n => `<button class="chip ${name === n ? 'on' 
 const empty = msg => `<p class="mut empty">${msg}</p>`;
 
 const evSelect = () => `<select id="evsel" aria-label="Event"><option value="">— choose event —</option>${S.events.map(x => `<option value="${x.id}" ${x.id === ev ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`;
+// install: Android / desktop Chrome offer a prompt we can trigger; iPhone needs Share → Add to Home Screen
+let installEvt = null;
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (code) render() });
+window.addEventListener('appinstalled', () => { installEvt = null; toast('Recon is installed'); if (code) render() });
+const installRow = () => standalone() ? '' : installEvt ? `<h3>App</h3><button data-act="install">Install Recon on this device</button>`
+  : isIOS ? `<h3>App</h3><p class="mut">To install: tap Share, then <b>Add to Home Screen</b>.</p>` : '';
 const settingsCard = () => `<details class="card" id="d-settings" ${det('d-settings', false)}><summary><h2>Team settings</h2></summary>
+  <p class="mut meta"><b>${esc(US)}</b> ${esc(teamInfo.name || '')}${teamInfo.org ? ' · ' + esc(teamInfo.org) : ''}</p>
   <h3>Team code</h3><div class="row"><code id="codeval" class="codeval" data-shown="0">${'•'.repeat(Math.max(6, code.length))}</code><button data-act="showcode" aria-pressed="false">Show</button><button data-act="copycode">Copy</button></div>
-  <h3>Our team number</h3><input id="cfg_us" value="${esc(cfg().us || DEFAULT_US)}" placeholder="e.g. 52111A">
-  <h3>Scout names (comma separated)</h3><input id="cfg_names" value="${esc(NAMES.join(', '))}">
-  <div class="foot"><button class="d" data-act="logout">Log out</button><span class="grow"></span><button class="p" data-act="savecfg">Save settings</button></div>
-  <p class="mut">Settings are shared with everyone on the team.</p></details>`;
+  <p class="mut">Anyone with your team number and this code can see and edit your team’s scouting. <button class="link" data-act="rotate">Make a new code</button></p>
+  <h3>Scout names (comma separated)</h3><input id="cfg_names" value="${esc(NAMES.join(', '))}" placeholder="Names show up here as people join">
+  <div class="foot"><button class="p" data-act="savecfg">Save names</button></div>
+  ${installRow()}
+  <div class="foot"><button class="link" data-act="about">About Recon</button><span class="grow"></span><button class="d" data-act="logout">Log out</button></div></details>`;
+const whoCard = (title, text) => `<div class="card"><h2>${title}</h2><p class="mut">${text}</p>${nameChips()}<div class="row"><input id="myname" placeholder="${NAMES.length ? 'Not listed? Type your name' : 'Your name'}" autocomplete="given-name" aria-label="Your name"><button data-act="addname">That’s me</button></div></div>`;
+function vAbout() {
+  return `<div class="sheethead"><div class="grow"><h2>About Recon</h2></div><button data-act="close">Close</button></div>
+  <div class="card about"><img class="heroicon" src="icon.svg" alt=""><div><b>Recon</b> <span class="mut">version ${APP.version}</span><p class="mut">Scouting for VEX V5 teams: match notes, scouting forms, rankings, OPR and a finals picklist, shared live with your team and working offline.</p></div></div>
+  <div class="card"><h2>Made by Invictus 52111A</h2><div class="credit"><img class="on-light" src="logo.svg" alt="Invictus 52111A"><img class="on-dark" src="logo-light.svg" alt="Invictus 52111A"></div><p class="mut">Recon was designed and built by VEX team 52111A, Invictus.</p></div>
+  <div class="card"><h2>Your data</h2><p class="mut">Each team’s scouting is private to that team: only people with your team number and team code can see or change it. Event lists, matches and rankings come from VEX Events.</p></div>
+  <p class="mut fine">© 2026 Invictus 52111A. All rights reserved. Recon is not affiliated with or endorsed by VEX Robotics or the REC Foundation.</p>`;
+}
 
 function vEvent() {
   const e = evObj(), sku = skuOf(e);
-  let h = name ? '' : `<div class="card"><h2>Who are you?</h2><p class="mut">Pick your name. It goes on your notes and scouting.</p>${nameChips()}</div>`;
+  let h = name ? '' : whoCard('Who are you?', 'Your name goes on your notes and scouting.');
   const importForm = `<div class="row"><input id="sku" value="${esc(sku || 'RE-V5RC-26-5068')}" placeholder="Event code e.g. RE-V5RC-26-5068"><button class="p" data-act="import">Import</button></div><p class="mut" id="impmsg"></p>`;
   const manualForm = `<div class="row"><input id="newev" placeholder="Event name"><button data-act="addev">Create</button></div>`;
-  if (!e) return h + `<div class="card"><h2>Pick your event</h2>${S.events.length ? evSelect() : ''}<h3>Import from VEX Events</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${importForm}<h3>Or create one by hand</h3>${manualForm}</div>` + settingsCard();
+  const me = name ? `<p class="mut meta">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></p>` : '';
+  if (!e) return h + `<div class="card"><h2>Pick your event</h2>${me}${S.events.length ? evSelect() : ''}<h3>Import from VEX Events</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${importForm}<h3>Or create one by hand</h3>${manualForm}</div>` + settingsCard();
   h += `<div class="card">${evSelect()}
     <p class="mut meta">${sku ? 'From VEX Events · ' + esc(sku) + ' · <button class="link" data-act="reimport">Update now</button>' : 'Created by hand'}${e.link ? ` · <a href="${esc(e.link)}" target="_blank" rel="noopener">Event page ↗</a>` : ''} <span id="impmsg2"></span></p>
-    ${name ? `<p class="mut meta">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></p>` : ''}
+    ${me}
     <details class="sub" id="d-more" ${det('d-more', false)}><summary>Import or add another event</summary>${importForm}${manualForm}</details>
     ${sku ? '' : `<details class="sub" id="d-link" ${det('d-link', false)}><summary>Event link</summary><input id="evlink" value="${esc(e.link || '')}" placeholder="Paste the VEX event link here"></details>`}
     <div class="foot"><button class="d" data-act="delev">Delete event and all its notes</button></div></div>
@@ -348,7 +402,7 @@ function vMatches() {
 const R = (f, v) => `<div class="rate" role="group">${[1, 2, 3, 4, 5].map(i => `<button data-act="rate" data-f="${f}" data-v="${i}" class="${v === i ? 'on' : ''}" aria-pressed="${v === i}">${i}</button>`).join('')}</div>`;
 function vScout() {
   if (!evObj()) return empty('Pick an event first.');
-  if (!name) return `<div class="card"><h2>Who’s scouting?</h2><p class="mut">Pick your name. You can scout each team once overall, plus once per match you watch, and come back to edit.</p>${nameChips()}</div>`;
+  if (!name) return whoCard('Who’s scouting?', 'You can scout each team once overall, plus once per match you watch, and come back to edit.');
   const ms = matches();
   if (scTeam && draft) {
     const d = draft, tms = ms.filter(m => m.red.includes(scTeam) || m.blue.includes(scTeam));
@@ -445,18 +499,43 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act, v = id => $('#' + id)?.value?.trim() || '';
   const me = name || 'Someone';
   if (a === 'tab') { flushDraft(); tab = b.dataset.v; ls('tab', tab); render() }
-  else if (a === 'login') { code = $('#codein').value.trim(); loginErr = false; api('/login', {}).then(() => { ls('code', code); online = true; return flush().then(pull) }).then(schedule).catch(e => { if (e instanceof NetErr) toast('Can’t reach the server. Check your connection.') }) }
+  else if (a === 'login') {
+    const t = norm(v('w_team')), c = $('#codein').value.trim();
+    if (!t || !c) { loginErr = 'Enter your team number and team code.'; render(); return }
+    const prevTeam = team, prevCode = code; team = t; code = c; loginErr = false; wbusy = true; render();
+    api('/login', {}).then(d => { wbusy = false; useTeam(t, d.team); ls('code', c); online = true; render(); return flush().then(pull) }).then(schedule)
+      .catch(e => { wbusy = false; code = ''; team = prevTeam; if (e instanceof NetErr) loginErr = 'Can’t reach Recon. Check your connection.'; else if (!(e instanceof AuthErr)) loginErr = e.message; render() });
+  }
+  else if (a === 'wmode') { wmode = b.dataset.v; ls('wmode', wmode); loginErr = false; render() }
+  else if (a === 'wlookup') {
+    const t = norm(v('w_new')); if (!t) return; wbusy = true; loginErr = false; render();
+    api('/lookup', { team: t }).then(d => { wlook = d; }).catch(e => { wlook = null; loginErr = e instanceof NetErr ? 'Can’t reach Recon. Check your connection.' : e.message }).finally(() => { wbusy = false; render() });
+  }
+  else if (a === 'wregister') {
+    wbusy = true; loginErr = false; render();
+    api('/register', { team: wlook.team.number }).then(d => { wcreated = d; wlook = null }).catch(e => { loginErr = e instanceof NetErr ? 'Can’t reach Recon. Check your connection.' : e.message }).finally(() => { wbusy = false; render() });
+  }
+  else if (a === 'wcopy') copyText(wcreated.code).then(() => toast('Team code copied'), () => toast('Couldn’t copy – write it down'));
+  else if (a === 'wdone') { const w = wcreated; wcreated = null; useTeam(w.team.number, w.team); code = w.code; ls('code', code); wmode = 'join'; online = true; render(); flush().then(pull).then(schedule) }
+  else if (a === 'rotate') { if (sure(b)) api('/rotate', {}).then(d => { code = d.code; ls('code', code); render(); const c = $('#codeval'); if (c) { c.textContent = code; c.dataset.shown = '1' } toast('New team code: ' + code + '. The old one no longer works, so share this one.') }).catch(e => toast('Couldn’t make a new code: ' + e.message)) }
+  else if (a === 'install') { if (installEvt) { installEvt.prompt(); installEvt.userChoice.finally(() => { installEvt = null; render() }) } }
+  else if (a === 'about') { mTeam = ':about'; render() }
+  else if (a === 'addname') {
+    const n = v('myname').replace(/\s+/g, ' ').slice(0, 30); if (!n) return;
+    if (!NAMES.includes(n)) put('config', 'main', { ...cfg(), names: [...NAMES, n] });
+    name = n; ls('name', name); $('#myname').value = ''; $('#myname').blur(); render();
+  }
   else if (a === 'peek') { const i = $('#codein'), show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.setAttribute('aria-pressed', show); b.setAttribute('aria-label', show ? 'Hide code' : 'Show code'); b.innerHTML = show ? EYE_OFF : EYE; i.focus() }
   else if (a === 'showcode') { const c = $('#codeval'), show = c.dataset.shown !== '1'; c.dataset.shown = show ? '1' : '0'; c.textContent = show ? code : '•'.repeat(Math.max(6, code.length)); b.textContent = show ? 'Hide' : 'Show'; b.setAttribute('aria-pressed', show) }
   else if (a === 'copycode') copyText(code).then(() => toast('Team code copied'), () => toast('Couldn’t copy – tap Show and copy it by hand'));
-  else if (a === 'logout') { if (sure(b)) { if (outbox.length && !confirm(outbox.length + ' changes haven’t been sent yet and will be lost. Log out anyway?')) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); schedule(); render(); setStatus() } }
+  else if (a === 'logout') { if (sure(b)) { if (outbox.length && !confirm(outbox.length + ' changes haven’t been sent yet and will be lost. Log out anyway?')) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; schedule(); render(); setStatus() } }
   else if (a === 'import') doImport(v('sku'), $('#impmsg'));
   else if (a === 'reimport') doImport(skuOf(evObj()), $('#impmsg2'));
   else if (a === 'team') { mTeam = b.dataset.t; render() }
   else if (a === 'close') closeModal();
   else if (a === 'addev') { const n = v('newev'); if (n) { const id = uid(); put('events', id, { name: n, link: '', picks: [] }); ev = id; ls('ev', id) } }
   else if (a === 'delev') { if (sure(b)) { send({ purge: ev }); ev = S.events[0] ? S.events[0].id : ''; ls('ev', ev) } }
-  else if (a === 'savecfg') { const us = norm(v('cfg_us')) || DEFAULT_US, names = [...new Set(v('cfg_names').split(',').map(s => s.trim()).filter(Boolean))]; put('config', 'main', { us, names: names.length ? names : DEFAULT_NAMES }); toast('Settings saved') }
+  else if (a === 'savecfg') { const names = [...new Set(v('cfg_names').split(',').map(s => s.trim()).filter(Boolean))]; put('config', 'main', { ...cfg(), names }); toast('Names saved') }
   else if (a === 'addteam') { const n = norm(v('t_n')); if (n) put('teams', ev + '_' + n, { eventId: ev, number: n, name: v('t_name'), school: v('t_s') }) }
   else if (a === 'delteam') { if (sure(b)) { del('teams', b.dataset.id); closeModal() } }
   else if (a === 'addmatch') {
@@ -523,7 +602,11 @@ document.addEventListener('pointerdown', e => {
   };
   g.addEventListener('pointermove', mv); g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up)
 });
-document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'codein') document.querySelector('[data-act=login]').click() });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const go = { codein: 'login', w_team: 'login', w_new: 'wlookup', myname: 'addname' }[e.target.id];
+  if (go) { e.preventDefault(); document.querySelector(`[data-act=${go}]`)?.click() }
+});
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushDraft(); else if (code) { flush(); pull() } });
 window.addEventListener('online', () => { if (code) { online = true; flush().then(pull) } });
 window.addEventListener('offline', () => { online = false; setStatus() });
