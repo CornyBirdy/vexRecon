@@ -56,3 +56,11 @@ details>summary:after{content:"▼";float:right;color:var(--mut);font-size:14px;
 #toast{position:fixed;left:16px;right:16px;bottom:calc(96px + env(safe-area-inset-bottom,0px));max-width:520px;margin:0 auto;background:var(--hd);color:#fff;border-radius:14px;padding:12px 16px;font-size:14px;box-shadow:0 8px 28px rgba(8,20,35,.3);z-index:10;opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .2s,transform .2s}
 #toast.show{opacity:1;transform:none}
 :root[data-theme=dark] #toast{background:#2A3E55}
+/* rankings table */
+.tblwrap{overflow-x:auto;margin:8px -4px}
+table.rk{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+.rk th{text-align:right;font-size:12px;color:var(--mut);font-weight:600;padding:6px 5px;border-bottom:1px solid var(--bd);white-space:nowrap}
+.rk td{text-align:right;padding:9px 5px;border-bottom:1px solid var(--bd);white-space:nowrap}
+.rk th:nth-child(2),.rk td:nth-child(2){text-align:left}.rk th:first-child,.rk td:first-child{text-align:left;color:var(--mut)}
+.rk tbody tr{cursor:pointer}.rk tr.us td{background:var(--acs)}.rk tr.us td:first-child{box-shadow:inset 3px 0 0 var(--ac)}
+@media(max-width:520px){.rk .wide{display:none}}

@@ -1,6 +1,6 @@
 import { getStore } from "@netlify/blobs";
 
-const COLS = ["events", "teams", "matches", "notes", "config"];
+const COLS = ["events", "teams", "matches", "notes", "config", "rankings"];
 const IDOK = /^[A-Za-z0-9_.\-]{1,200}$/;
 const SKU = /^RE-[A-Z0-9]+-\d{2}-\d{4}$/;
 const BASE = { 1: 0, 2: 1000, 6: 2000, 3: 3000, 4: 4000, 5: 5000 };
@@ -45,13 +45,25 @@ async function matchDocs(eid, reid, divs) {
       const r = m.round, n = m.matchnum;
       const label = r === 1 || r === 2 ? PRE[r] + n : r === 5 ? "F" + n : (PRE[r] || "M") + m.instance + "-" + n;
       docs.push([`matches/${eid}_${d}_${r}_${m.instance}_${n}`, {
-        eventId: eid, label, order: (BASE[r] ?? 9000) + (m.instance || 0) * 100 + n,
+        eventId: eid, label, round: r, order: (BASE[r] ?? 9000) + (m.instance || 0) * 100 + n,
         red: tm(al("red")), blue: tm(al("blue")),
         rs: m.scored && al("red") ? al("red").score : null, bs: m.scored && al("blue") ? al("blue").score : null,
       }]);
     }
   }
   return docs;
+}
+
+// official rankings for every division, one doc per event
+async function rankDoc(eid, reid, divs) {
+  const list = [];
+  for (const d of divs) {
+    for (const x of await all(`/events/${reid}/divisions/${d}/rankings`)) {
+      const team = x.team && (x.team.name || x.team.code);
+      if (team) list.push({ team, div: d, rank: x.rank, w: x.wins, l: x.losses, t: x.ties, wp: x.wp, ap: x.ap, sp: x.sp, high: x.high_score, avg: x.average_points });
+    }
+  }
+  return ["rankings/" + eid, { eventId: eid, list, t: Date.now() }];
 }
 
 export default async (req) => {
@@ -104,13 +116,13 @@ export default async (req) => {
       const eid = String(body.eventId || "");
       if (!IDOK.test(eid)) return json({ error: "Bad request" }, 400);
       const gone = ["events/" + eid];
-      for (const c of ["teams", "matches", "notes"]) {
+      for (const c of ["teams", "matches", "notes", "rankings"]) {
         const { blobs } = await store.list({ prefix: c + "/" });
         const docs = await Promise.all(blobs.map((b) => store.get(b.key, { type: "json" })));
         docs.forEach((d, i) => { if (d && d.eventId === eid) gone.push(blobs[i].key); });
       }
       for (let i = 0; i < gone.length; i += 20) await Promise.all(gone.slice(i, i + 20).map((k) => store.delete(k)));
-      await Promise.all([store.delete("_mh_" + eid), store.delete("_imp_" + eid)]);
+      await Promise.all([store.delete("_mh_" + eid), store.delete("_imp_" + eid), store.delete("_rk_" + eid)]);
       await bump();
       return json({ ok: true, deleted: gone.length });
     }
@@ -133,11 +145,23 @@ export default async (req) => {
         const docs = await matchDocs(eid, old.reid, old.divs || []);
         const h = JSON.stringify(docs);
         const prev = await store.get("_mh_" + eid, { type: "json" });
-        if (prev && prev.h === h) return json({ ok: true, changed: false, eventId: eid });
-        await writeAll(docs);
-        await store.setJSON("_mh_" + eid, { h });
-        await bump();
-        return json({ ok: true, changed: true, eventId: eid });
+        const changed = !prev || prev.h !== h;
+        if (changed) {
+          await writeAll(docs);
+          await store.setJSON("_mh_" + eid, { h });
+        }
+        // Rankings: VEX Events updates them a little after the scores, so after any score change
+        // keep checking them for 3 minutes (only writing when they actually change).
+        const rk = (await store.get("_rk_" + eid, { type: "json" })) || {};
+        let rkChanged = false;
+        if (changed || !rk.h || Date.now() < (rk.until || 0)) {
+          const rd = await rankDoc(eid, old.reid, old.divs || []);
+          const rh = JSON.stringify(rd[1].list);
+          if (rh !== rk.h) { await store.setJSON(rd[0], rd[1]); rkChanged = true; }
+          await store.setJSON("_rk_" + eid, { h: rh, until: changed ? Date.now() + 180000 : rk.until || 0 });
+        }
+        if (changed || rkChanged) await bump();
+        return json({ ok: true, changed: changed || rkChanged, eventId: eid });
       }
 
       // full import: event, teams, matches
@@ -153,8 +177,10 @@ export default async (req) => {
       for (const t of teams)
         docs.push([`teams/${eid}_${t.number}`, { eventId: eid, number: t.number, name: t.team_name || "", school: t.organization || "" }]);
       const md = await matchDocs(eid, e.id, divs);
-      await writeAll([...docs, ...md]);
+      const rd = await rankDoc(eid, e.id, divs);
+      await writeAll([...docs, ...md, rd]);
       await store.setJSON("_mh_" + eid, { h: JSON.stringify(md) });
+      await store.setJSON("_rk_" + eid, { h: JSON.stringify(rd[1].list), until: Date.now() + 180000 });
       await bump();
       return json({ ok: true, eventId: eid, teams: teams.length, matches: md.length });
     }

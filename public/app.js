@@ -15,9 +15,9 @@ const slug = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 // Defaults until the team saves its own in Settings (Event tab).
 const DEFAULT_US = '52111A', DEFAULT_NAMES = ['Charlie', 'Oscar', 'Aidin', 'Seb', 'J-Pup'];
 let US = DEFAULT_US, NAMES = DEFAULT_NAMES;
-const COLS = ['events', 'teams', 'matches', 'notes', 'config'];
-let S = { events: [], teams: [], matches: [], notes: [], config: [] };
-let ev = ls('ev'), tab = ls('tab') || 'event', name = ls('name'), mf = ls('mf') || 'ours';
+const COLS = ['events', 'teams', 'matches', 'notes', 'config', 'rankings'];
+let S = { events: [], teams: [], matches: [], notes: [], config: [], rankings: [] };
+let ev = ls('ev'), tab = ls('tab') || 'event', name = ls('name'), mf = ls('mf') || 'ours', tv = ls('tv') || 'list', rks = ls('rks') || 'rank';
 let mTeam = null, scTeam = '', draft = null, open = {}, dirty = false, loaded = false;
 
 const cfg = () => S.config.find(c => c.id === 'main') || {};
@@ -32,6 +32,52 @@ const scored = m => m.rs != null && (m.rs || m.bs);
 // Scouting entries: one per scout per team ("general"), plus optionally one per scout per match watched.
 const scoutBase = (t, who) => 's_' + ev + '_' + t + '_' + slug(who);
 const scoutId = (t, who, matchId) => scoutBase(t, who) + (matchId ? '_' + matchId : '');
+// ---------- stats: OPR / DPR / CCWM and standings ----------
+// OPR: least-squares estimate of the points each team adds to its alliance, from qualification scores.
+// DPR: the same for points the opposing alliance scores. CCWM = OPR − DPR (effect on the winning margin).
+const isQual = m => m.round === 2 || (m.round == null && /^Q\d/i.test(m.label || ''));
+function solve(M, b) { // Gaussian elimination with partial pivoting; M is modified
+  const n = b.length;
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];[b[c], b[p]] = [b[p], b[c]];
+    for (let r = c + 1; r < n; r++) { const f = M[r][c] / M[c][c]; if (!f) continue; for (let k = c; k < n; k++) M[r][k] -= f * M[c][k]; b[r] -= f * b[c] }
+  }
+  const x = new Array(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) { let v = b[r]; for (let k = r + 1; k < n; k++) v -= M[r][k] * x[k]; x[r] = v / M[r][r] }
+  return x;
+}
+let statsMemo = { key: '', val: null };
+function stats() {
+  const qs = matches().filter(m => isQual(m) && m.rs != null && m.bs != null);
+  const off = S.rankings.find(r => r.eventId === ev), offList = (off && off.list) || [];
+  const key = ev + '|' + JSON.stringify(qs.map(m => [m.red, m.blue, m.rs, m.bs])) + '|' + (off ? off.t : '');
+  if (statsMemo.key === key) return statsMemo.val;
+  const nums = [...new Set(qs.flatMap(m => [...m.red, ...m.blue]))], idx = new Map(nums.map((n, i) => [n, i])), n = nums.length;
+  const by = new Map(nums.map(t => [t, { w: 0, l: 0, t: 0, played: 0, opr: 0, dpr: 0, ccwm: 0 }]));
+  if (n) {
+    const AtA = nums.map(() => new Array(n).fill(0)), bo = new Array(n).fill(0), bd = new Array(n).fill(0);
+    for (const m of qs) for (const [mine, other, ms, os] of [[m.red, m.blue, m.rs, m.bs], [m.blue, m.red, m.bs, m.rs]]) {
+      for (const a of mine) {
+        for (const b of mine) AtA[idx.get(a)][idx.get(b)]++;
+        bo[idx.get(a)] += ms; bd[idx.get(a)] += os;
+        const r = by.get(a); r.played++; if (ms > os) r.w++; else if (ms < os) r.l++; else r.t++;
+      }
+    }
+    const reg = () => AtA.map((row, i) => row.map((v, j) => v + (i === j ? 1e-3 : 0))); // tiny ridge keeps it solvable early on
+    const opr = solve(reg(), bo), dpr = solve(reg(), bd);
+    nums.forEach((t, i) => { const r = by.get(t); r.opr = opr[i]; r.dpr = dpr[i]; r.ccwm = opr[i] - dpr[i]; r.wp = 2 * r.w + r.t });
+  }
+  // rank: official from VEX Events if we have it, otherwise calculated (win points, then OPR)
+  const official = offList.length > 0;
+  if (official) for (const o of offList) by.set(o.team, { ...(by.get(o.team) || { opr: null, dpr: null, ccwm: null, played: o.w + o.l + o.t }), rank: o.rank, w: o.w, l: o.l, t: o.t, wp: o.wp, ap: o.ap, sp: o.sp, div: o.div });
+  else[...by.entries()].sort((a, b) => b[1].wp - a[1].wp || b[1].opr - a[1].opr).forEach(([, r], i) => { r.rank = i + 1 });
+  const divs = new Set(offList.map(o => o.div));
+  return (statsMemo = { key, val: { by, official, multiDiv: divs.size > 1, n: qs.length } }).val;
+}
+const f1 = v => v == null || isNaN(v) ? '–' : v.toFixed(1);
+const sgn = v => v == null || isNaN(v) ? '–' : (v > 0 ? '+' : '') + v.toFixed(1);
+const rec = r => r.w + '-' + r.l + '-' + r.t;
 const myScouts = t => { const b = scoutBase(t, name); return S.notes.filter(n => n.kind === 'scout' && (n.id === b || n.id.startsWith(b + '_'))) };
 
 // ---------- sync ----------
@@ -205,9 +251,23 @@ const tlist = () => `<datalist id="tl">${teams().map(t => `<option value="${t.nu
 
 function vTeams() {
   if (!evObj()) return '<p class="mut">Pick an event first.</p>';
-  return `<div class="card"><h2>Add team</h2><div class="row"><input id="t_n" placeholder="Number e.g. 52111A"><input id="t_name" placeholder="Team name"><input id="t_s" placeholder="School"><button data-act="addteam">Add</button></div></div>
+  const seg = `<div class="seg">${[['list', 'All teams'], ['rank', 'Rankings']].map(([k, l]) => `<button class="${tv === k ? 'on' : ''}" data-act="tview" data-v="${k}">${l}</button>`).join('')}</div>`;
+  if (tv === 'rank') return seg + vRank();
+  return seg + `<div class="card"><h2>Add team</h2><div class="row"><input id="t_n" placeholder="Number e.g. 52111A"><input id="t_name" placeholder="Team name"><input id="t_s" placeholder="School"><button data-act="addteam">Add</button></div></div>
   <input id="tsearch" placeholder="Search teams…" oninput="filt(this.value)">
   <div id="tl2">${teams().map(t => `<div class="card ${t.number === US ? 'us' : ''}" data-q="${esc((t.number + t.name + t.school).toLowerCase())}"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;cursor:pointer" data-act="team" data-t="${t.number}"><span class="num">${t.number}</span>${esc(t.name)}<div class="mut">${esc(t.school)} · ${notes('scout', t.number).length + notes('team', t.number).length} notes</div></div><button class="d" data-act="delteam" data-id="${t.id}">✕</button></div></div>`).join('') || '<p class="mut">No teams yet.</p>'}</div>`;
+}
+function vRank() {
+  const st = stats(), rows = [...st.by.entries()].map(([team, r]) => ({ ...r, team }));
+  if (!rows.length) return '<div class="card"><h2>Rankings</h2><p class="mut">No qualification matches have been scored yet. Rankings and OPR show up here once they are.</p></div>';
+  const key = { rank: (a, b) => (a.div || 0) - (b.div || 0) || a.rank - b.rank, opr: (a, b) => (b.opr ?? -1e9) - (a.opr ?? -1e9), ccwm: (a, b) => (b.ccwm ?? -1e9) - (a.ccwm ?? -1e9) }[rks];
+  rows.sort(key);
+  return `<div class="card"><h2>Rankings</h2><p class="mut">${st.official ? 'Official rankings from VEX Events.' : 'Calculated from qualification scores (win points, then OPR). Official rankings replace these once VEX Events has them.'} OPR uses ${st.n} scored qualification ${st.n === 1 ? 'match' : 'matches'}.</p>
+  <div class="seg">${[['rank', 'Rank'], ['opr', 'OPR'], ['ccwm', 'CCWM']].map(([k, l]) => `<button class="${rks === k ? 'on' : ''}" data-act="rksort" data-v="${k}">Sort by ${l}</button>`).join('')}</div>
+  <div class="tblwrap"><table class="rk"><thead><tr><th>#</th><th>Team</th><th>W-L-T</th><th>WP</th><th class="wide">AP</th><th class="wide">SP</th><th>OPR</th><th class="wide">DPR</th><th>CCWM</th></tr></thead><tbody>
+  ${rows.map(r => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}"><td>${st.multiDiv ? 'D' + r.div + '·' : ''}${r.rank ?? '–'}</td><td><b>${esc(r.team)}</b></td><td>${rec(r)}</td><td>${r.wp ?? '–'}</td><td class="wide">${r.ap ?? '–'}</td><td class="wide">${r.sp ?? '–'}</td><td>${f1(r.opr)}</td><td class="wide">${f1(r.dpr)}</td><td>${sgn(r.ccwm)}</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="mut">OPR ≈ points a team adds to its alliance. DPR ≈ points the other alliance scores against it. CCWM = OPR − DPR, its effect on the winning margin. Tap a team for details.</p></div>`;
 }
 function filt(q) { q = q.toLowerCase(); document.querySelectorAll('#tl2 .card').forEach(c => c.style.display = c.dataset.q.includes(q) ? '' : 'none') }
 
@@ -291,6 +351,7 @@ function vTeam(num) {
   const sc = notes('scout', num);
   const avg = f => { const v = sc.map(s => parseFloat(s[f])).filter(x => x > 0); return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-' };
   return `<div class="row" style="flex-wrap:nowrap"><h2 style="flex:1">${esc(num)} ${esc(t.name)}</h2><button class="g" data-act="close">Close</button></div><div class="mut">${esc(t.school)}</div>
+  ${(() => { const st = stats(), r = st.by.get(num); return r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '' })()}
   <div class="card"><b>Averages</b> (${sc.length} ${sc.length === 1 ? 'entry' : 'entries'})<div class="mut">Auto ${avg('autoPts')} pts · Driver ${avg('driver')} · Speed ${avg('speed')} · Scoring ${avg('scoring')} · Durability ${avg('durability')} · Overall ${avg('overall')}</div></div>
   <div class="card"><h2>Matches</h2>${ms.map(m => `<span class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}">${esc(m.label)}</span>`).join('') || '<span class="mut">None</span>'}</div>
   <div class="card"><h2>Notes on this team</h2>${noteBox('team', num, '', 'Add a note about ' + num + '…')}${notes('team', num).length ? `<button class="d" data-act="clearnotes" data-t="${num}">Clear all notes on this team</button>` : ''}</div>
@@ -301,7 +362,7 @@ function vTeam(num) {
 function vPick() {
   const e = evObj(); if (!e) return '<p class="mut">Pick an event first.</p>';
   const p = e.picks || [], avail = teams().filter(t => t.number !== US && !p.includes(t.number));
-  return `<div class="card"><h2>Finals picklist</h2><p class="mut">Hold the ≡ handle and drag to reorder, or use the arrows. #1 is who we want most.</p><div id="pklist">${p.map((n, i) => `<div class="pk" data-i="${i}"><span class="grip" title="Drag to reorder">≡</span><span class="num" style="width:34px;color:var(--ac)">${i + 1}</span><div style="flex:1;cursor:pointer" data-act="team" data-t="${n}"><span class="num">${n}</span>${esc(tName(n))}<div class="mut">${notes('req', n).length ? 'Asked to ally · ' : ''}${notes('scout', n).length} scouting entries</div></div><span class="arrows"><button class="g" data-act="pup" data-i="${i}" aria-label="Move up" ${i ? '' : 'disabled'}>▲</button><button class="g" data-act="pdn" data-i="${i}" aria-label="Move down" ${i < p.length - 1 ? '' : 'disabled'}>▼</button></span><button class="d" data-act="prm" data-i="${i}">Remove</button></div>`).join('') || '<p class="mut">Nothing yet. Tap a team below to add it.</p>'}</div></div>
+  return `<div class="card"><h2>Finals picklist</h2><p class="mut">Hold the ≡ handle and drag to reorder, or use the arrows. #1 is who we want most.</p><div id="pklist">${p.map((n, i) => `<div class="pk" data-i="${i}"><span class="grip" title="Drag to reorder">≡</span><span class="num" style="width:34px;color:var(--ac)">${i + 1}</span><div style="flex:1;cursor:pointer" data-act="team" data-t="${n}"><span class="num">${n}</span>${esc(tName(n))}<div class="mut">${(r => r ? 'Rank ' + (r.rank ?? '–') + ' · OPR ' + f1(r.opr) + ' · ' : '')(stats().by.get(n))}${notes('req', n).length ? 'Asked to ally · ' : ''}${notes('scout', n).length} scouting entries</div></div><span class="arrows"><button class="g" data-act="pup" data-i="${i}" aria-label="Move up" ${i ? '' : 'disabled'}>▲</button><button class="g" data-act="pdn" data-i="${i}" aria-label="Move down" ${i < p.length - 1 ? '' : 'disabled'}>▼</button></span><button class="d" data-act="prm" data-i="${i}">Remove</button></div>`).join('') || '<p class="mut">Nothing yet. Tap a team below to add it.</p>'}</div></div>
   <div class="card"><h2>Still to pick</h2><p class="mut">Tap a team to add it to the list.</p>${avail.map(t => `<button class="chip" data-act="addpick" data-t="${t.number}">${t.number}</button>`).join('') || '<span class="mut">Every team is on the list.</span>'}</div>`;
 }
 const setPicks = p => upd('events', ev, { picks: p });
@@ -328,6 +389,8 @@ document.addEventListener('click', e => {
   }
   else if (a === 'delmatch') { if (sure(b)) del('matches', b.dataset.id) }
   else if (a === 'mopen') { open[b.dataset.id] = !open[b.dataset.id]; render() }
+  else if (a === 'tview') { tv = b.dataset.v; ls('tv', tv); render() }
+  else if (a === 'rksort') { rks = b.dataset.v; ls('rks', rks); render() }
   else if (a === 'mfilter') { mf = b.dataset.v; ls('mf', mf); render() }
   else if (a === 'addnote') { const t = $('#' + b.dataset.in).value.trim(); if (t && !(b.dataset.kind === 'team' && b.dataset.ref === US)) put('notes', uid(), { eventId: ev, kind: b.dataset.kind, ref: b.dataset.ref, sec: b.dataset.sec, text: t, by: me, ts: Date.now() }); $('#' + b.dataset.in).value = '' }
   else if (a === 'delnote') { if (sure(b)) del('notes', b.dataset.id) }

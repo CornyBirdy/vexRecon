@@ -38,6 +38,10 @@ works except the VEX Events import – add an event, teams and matches by hand i
   The header says `Offline · 3 unsaved` while you have no signal and goes back to `Synced` once everything is sent.
   The app and the last downloaded data are saved on the phone, so it still opens with no signal.
 - **Team settings** (bottom of the Event tab): our team number and the list of scout names, shared with everyone.
+- **Rankings & OPR** (Teams tab → Rankings). Official rankings (W-L-T, WP, AP, SP) come from VEX Events and refresh
+  with the scores. OPR, DPR and CCWM are worked out on the phone from the scored qualification matches. Before VEX Events
+  has rankings, the table shows standings calculated from the scores instead (labelled as such). Rank and OPR also show on
+  each team's page and on the picklist.
 - **Scouting.** Each scout has one overall entry per team, and can add one per match they watched
   ("What are you scouting?" at the top of the form). The team page averages all of them.
 
