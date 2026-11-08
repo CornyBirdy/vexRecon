@@ -36,5 +36,7 @@ function also holds the RobotEvents key. Preview locally with `netlify dev` (see
   source (it switches light/dark with the browser, for the tab icon); `icon-light.svg` / `icon-dark.svg` are static copies the header swaps with the app's own theme; PNGs, maskable icons and `favicon.ico` are rendered from it (`icon-32-light.png` is the light-tab favicon).
 
 ## Before you push
+- Add what changed (in plain words, as the user would notice it) to `CHANGELOG.md` under **Unreleased**. Change
+  `APP.version` in `public/app.js` and cut a new heading only when the owner asks for a release.
 - Test in a real browser (Playwright is available) with the API mocked or the function run in-process, in both
   light and dark mode, and check text contrast stays at 4.5:1 or better.
