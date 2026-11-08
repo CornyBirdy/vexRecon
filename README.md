@@ -42,6 +42,10 @@ works except the VEX Events import – add an event, teams and matches by hand i
   with the scores. OPR, DPR and CCWM are worked out on the phone from the scored qualification matches. Before VEX Events
   has rankings, the table shows standings calculated from the scores instead (labelled as such). Rank and OPR also show on
   each team's page and on the picklist.
+- **Team code.** The eye button on the login box shows what you typed. Team settings (bottom of the Event tab) can
+  show or copy the code so you can give it to a teammate.
+- **Motion.** Views fade in, the team page slides up (tap outside it to close), match notes slide open, new notes fade in
+  and picklist / ranking rows glide when they move. All of it turns off with the phone's "reduce motion" setting.
 - **Scouting.** Each scout has one overall entry per team, and can add one per match they watched
   ("What are you scouting?" at the top of the form). The team page averages all of them.
 

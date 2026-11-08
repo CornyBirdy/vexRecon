@@ -125,7 +125,7 @@ function queue(o) {
 }
 
 const cacheState = () => lsJ('cache', { S, v: lastV, t: lastSync });
-function send(o) { editSeq++; applyOp(o); queue(o); cacheState(); setStatus(); flush(); setTimeout(render, 0) }
+function send(o, quiet) { editSeq++; applyOp(o); queue(o); cacheState(); setStatus(); flush(); if (!quiet) setTimeout(render, 0) }
 const put = (k, id, d) => send({ col: k, id, data: d, mode: 'set' });
 const upd = (k, id, d) => send({ col: k, id, data: d, mode: 'update' });
 const del = (k, id) => send({ col: k, id, mode: 'delete' });
@@ -180,7 +180,9 @@ function setStatus() {
 let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 5000) }
 
-const loginHTML = () => `<div class="card"><h2>Team code</h2><p class="mut">Enter the team code to open Invictus scouting.</p><input id="codein" type="password" autocomplete="current-password" placeholder="Team code">${loginErr ? '<p style="color:var(--danger)">That code didn’t work.</p>' : ''}<button data-act="login">Open</button></div>`;
+const EYE = '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.7-1.3M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+const loginHTML = () => `<div class="card login"><h2>Team code</h2><p class="mut">Enter the team code to open Invictus scouting.</p><div class="pw"><input id="codein" type="password" autocomplete="current-password" placeholder="Team code" aria-label="Team code"><button type="button" class="icon" data-act="peek" aria-label="Show code" aria-pressed="false">${EYE}</button></div>${loginErr ? '<p class="err">That code didn’t work.</p>' : ''}<button class="p wide" data-act="login">Open</button></div>`;
 
 async function init() {
   const c = lsJ('cache');
@@ -200,62 +202,113 @@ const TABS = [
   ['pick', '<svg viewBox="0 0 24 24"><path d="M7 4h10v4a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v4M8 21h8M10 17h4"/></svg>', 'Picklist']];
 
 let dragging = false;
+// ---------- rendering + motion ----------
+// The whole view is re-rendered from state. To keep motion calm, animations only play on real changes:
+// a new view fades in, rows that moved glide to their new place (FLIP), a newly opened section slides open,
+// notes that weren't on screen before fade in, and the team sheet slides up. Nothing moves with reduce-motion on.
+const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+let lastView = '', modalShown = false, justOpened = null, seenNotes = null, renderedAt = 0, tq = '';
+const viewKey = () => [ev, tab, tab === 'teams' ? tv : '', tab === 'matches' ? mf : '', tab === 'scout' && draft ? draft.id : '', name ? 1 : 0].join('|');
+function flipCapture() { const m = new Map(); document.querySelectorAll('#app [data-flip]').forEach(e => m.set(e.dataset.flip, e.getBoundingClientRect().top)); return m }
+function flipPlay(m) {
+  if (reduced()) return;
+  document.querySelectorAll('#app [data-flip]').forEach(e => { const t = m.get(e.dataset.flip); if (t == null) return; const dy = t - e.getBoundingClientRect().top; if (Math.abs(dy) > 1) e.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)' }) });
+}
+function replay(el, c) { el.classList.remove(c); void el.offsetWidth; el.classList.add(c) }
+const fresh = n => seenNotes && !seenNotes.has(n.id) ? 'fresh' : '';
+
 function render() {
   if (dragging) { dirty = true; return }
-  if (!code) { $('#nav').innerHTML = ''; $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Team login'; return }
+  if (!code) { $('#nav').innerHTML = ''; $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Team login'; lastView = ''; return }
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { dirty = true; return }
   dirty = false;
   US = norm(cfg().us) || DEFAULT_US;
   NAMES = Array.isArray(cfg().names) && cfg().names.length ? cfg().names : DEFAULT_NAMES;
   if (loaded && name && !NAMES.includes(name)) { name = ''; ls('name', '') }
   $('#evname').textContent = evObj() ? evObj().name : 'Choose an event to start';
-  $('#nav').innerHTML = TABS.map(t => `<button class="${tab === t[0] ? 'on' : ''}" data-act="tab" data-v="${t[0]}">${t[1]}<span>${t[2]}</span></button>`).join('');
-  const y = scrollY;
+  // the tab bar is built once and only its classes change, so the selected tab can ease across
+  const nav = $('#nav');
+  if (!nav.children.length) nav.innerHTML = TABS.map(t => `<button data-act="tab" data-v="${t[0]}">${t[1]}<span>${t[2]}</span></button>`).join('');
+  nav.querySelectorAll('button').forEach(b => { const on = b.dataset.v === tab; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false') });
+  const key = viewKey(), same = key === lastView, before = same ? flipCapture() : null, y = scrollY;
   $('#app').innerHTML = ({ event: vEvent, teams: vTeams, matches: vMatches, scout: vScout, pick: vPick })[tab]();
-  scrollTo(0, y);
-  $('#mbody').innerHTML = mTeam ? vTeam(mTeam) : ''; $('#modal').style.display = mTeam ? 'block' : 'none';
+  scrollTo(0, same ? y : 0);
+  if (same) flipPlay(before); else if (lastView && !reduced()) replay($('#app'), 'enter');
+  lastView = key; justOpened = null;
+  const md = $('#modal');
+  $('#mbody').innerHTML = mTeam ? vTeam(mTeam) : '';
+  if (mTeam && !modalShown) { md.style.display = 'block'; if (!reduced()) replay(md, 'opening') }
+  else if (!mTeam) md.style.display = 'none';
+  modalShown = !!mTeam;
+  seenNotes = new Set(S.notes.map(n => n.id));
+  renderedAt = performance.now();
 }
+function closeModal() {
+  const md = $('#modal');
+  if (reduced()) { mTeam = null; render(); return }
+  md.classList.remove('opening'); md.classList.add('closing');
+  setTimeout(() => { md.classList.remove('closing'); mTeam = null; render() }, 180);
+}
+
+// Folded sections remember whether you opened them, so a teammate's change doesn't snap them shut.
+const dState = {};
+const det = (id, def) => (id in dState ? dState[id] : def) ? 'open' : '';
+document.addEventListener('toggle', e => {
+  const d = e.target; if (d.tagName !== 'DETAILS' || !d.id) return;
+  const was = d.id in dState ? dState[d.id] : null; dState[d.id] = d.open;
+  if (d.open && was !== true && performance.now() - renderedAt > 60 && !reduced()) replay(d, 'reveal');
+}, true);
+
+// Note boxes: one line until you tap in; "Add" lights up once there's text. Half-typed notes survive re-renders.
+const drafts = {};
 function noteBox(kind, ref, sec, ph) {
-  const id = 'n' + uid();
-  return `<textarea id="${id}" placeholder="${esc(ph || 'Write a note…')}"></textarea><button data-act="addnote" data-kind="${kind}" data-ref="${esc(ref || '')}" data-sec="${sec || ''}" data-in="${id}">Add note</button>` +
+  const id = 'n' + uid(), k = kind + '|' + (ref || '') + '|' + (sec || ''), v = drafts[k] || '';
+  return `<div class="composer ${v.trim() ? 'has' : ''}"><textarea id="${id}" rows="1" data-draft="${esc(k)}" placeholder="${esc(ph || 'Write a note…')}">${esc(v)}</textarea><button data-act="addnote" data-kind="${kind}" data-ref="${esc(ref || '')}" data-sec="${sec || ''}" data-in="${id}">Add note</button></div>` +
     notes(kind, ref || '', sec || '').map(noteRow).join('');
 }
 const when = ts => new Date(ts).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
-const noteRow = n => `<div class="note">${esc(n.text)}<small>${esc(n.by || '?')} · ${when(n.ts)} <button class="d" data-act="delnote" data-id="${n.id}">delete</button></small></div>`;
-const nameChips = () => NAMES.map(n => `<button class="chip ${name === n ? 'on' : ''}" data-act="setname" data-v="${esc(n)}">${esc(n)}</button>`).join('');
+const noteRow = n => `<div class="note ${fresh(n)}"><div class="ntext">${esc(n.text)}</div><small>${esc(n.by || '?')} · ${when(n.ts)}<button class="d" data-act="delnote" data-id="${n.id}">Delete</button></small></div>`;
+const nameChips = () => NAMES.map(n => `<button class="chip ${name === n ? 'on' : ''}" data-act="setname" data-v="${esc(n)}" aria-pressed="${name === n}">${esc(n)}</button>`).join('');
+const empty = msg => `<p class="mut empty">${msg}</p>`;
+
+const evSelect = () => `<select id="evsel" aria-label="Event"><option value="">— choose event —</option>${S.events.map(x => `<option value="${x.id}" ${x.id === ev ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`;
+const settingsCard = () => `<details class="card" id="d-settings" ${det('d-settings', false)}><summary><h2>Team settings</h2></summary>
+  <h3>Team code</h3><div class="row"><code id="codeval" class="codeval" data-shown="0">${'•'.repeat(Math.max(6, code.length))}</code><button data-act="showcode" aria-pressed="false">Show</button><button data-act="copycode">Copy</button></div>
+  <h3>Our team number</h3><input id="cfg_us" value="${esc(cfg().us || DEFAULT_US)}" placeholder="e.g. 52111A">
+  <h3>Scout names (comma separated)</h3><input id="cfg_names" value="${esc(NAMES.join(', '))}">
+  <div class="foot"><button class="d" data-act="logout">Log out</button><span class="grow"></span><button class="p" data-act="savecfg">Save settings</button></div>
+  <p class="mut">Settings are shared with everyone on the team.</p></details>`;
 
 function vEvent() {
-  const e = evObj(), c = cfg();
-  let h = `<div class="card"><h2>Import from VEX Events</h2><p class="mut">Pulls the event, teams and matches. Press it again any time to update.</p><input id="sku" value="${esc(skuOf(e) || 'RE-V5RC-26-5068')}" placeholder="Event code e.g. RE-V5RC-26-5068"><button data-act="import">Import / update now</button> <span class="mut" id="impmsg"></span></div><div class="card"><h2>Who are you?</h2><p class="mut">Your name goes on your notes and scouting.</p>${nameChips()}</div>
-  <div class="card"><h2>Event</h2>
-  <select id="evsel"><option value="">— choose event —</option>${S.events.map(x => `<option value="${x.id}" ${x.id === ev ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
-  <div class="row"><input id="newev" placeholder="New event name"><button data-act="addev">Add event</button></div></div>`;
-  if (e) {
-    h += `<div class="card"><h2>${esc(e.name)}</h2><h3>RobotEvents link</h3>
-    <input id="evlink" value="${esc(e.link || '')}" placeholder="Paste the VEX event link here">
-    ${e.link ? `<p><a href="${esc(e.link)}" target="_blank" rel="noopener"><button type="button">Open event page ↗</button></a></p>` : ''}
-    <button class="d" data-act="delev">Delete event and all its notes</button></div>
-    <div class="card"><h2>Alliance requests</h2><p class="mut">Teams that asked to ally with us & what they told us they’re good at.</p>
-    <div class="row"><input id="rq_t" list="tl" placeholder="Team #"><input id="rq_x" placeholder="Their strengths"><button data-act="addreq">Add</button></div>
-    ${notes('req').map(n => `<div class="note"><b>${esc(n.ref)}</b> ${esc(tName(n.ref))} — ${esc(n.text)}<small>${esc(n.by || '')} <button class="d" data-act="delnote" data-id="${n.id}">delete</button></small></div>`).join('')}</div>
-    <div class="card"><h2>Event notes</h2>${noteBox('event', '', '', 'Anything about this event…')}</div>`;
-  } else h += '<p class="mut">Create or pick an event to start.</p>';
-  h += `<details class="card"><summary><h2>Team settings</h2></summary>
-    <h3>Our team number</h3><input id="cfg_us" value="${esc(c.us || DEFAULT_US)}" placeholder="e.g. 52111A">
-    <h3>Scout names (comma separated)</h3><input id="cfg_names" value="${esc(NAMES.join(', '))}">
-    <p class="row"><button data-act="savecfg">Save settings</button><button class="g" data-act="logout">Log out</button></p>
-    <p class="mut">Settings are shared with everyone on the team.</p></details>`;
-  return h + tlist();
+  const e = evObj(), sku = skuOf(e);
+  let h = name ? '' : `<div class="card"><h2>Who are you?</h2><p class="mut">Pick your name. It goes on your notes and scouting.</p>${nameChips()}</div>`;
+  const importForm = `<div class="row"><input id="sku" value="${esc(sku || 'RE-V5RC-26-5068')}" placeholder="Event code e.g. RE-V5RC-26-5068"><button class="p" data-act="import">Import</button></div><p class="mut" id="impmsg"></p>`;
+  const manualForm = `<div class="row"><input id="newev" placeholder="Event name"><button data-act="addev">Create</button></div>`;
+  if (!e) return h + `<div class="card"><h2>Pick your event</h2>${S.events.length ? evSelect() : ''}<h3>Import from VEX Events</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${importForm}<h3>Or create one by hand</h3>${manualForm}</div>` + settingsCard();
+  h += `<div class="card">${evSelect()}
+    <p class="mut meta">${sku ? 'From VEX Events · ' + esc(sku) + ' · <button class="link" data-act="reimport">Update now</button>' : 'Created by hand'}${e.link ? ` · <a href="${esc(e.link)}" target="_blank" rel="noopener">Event page ↗</a>` : ''} <span id="impmsg2"></span></p>
+    ${name ? `<p class="mut meta">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></p>` : ''}
+    <details class="sub" id="d-more" ${det('d-more', false)}><summary>Import or add another event</summary>${importForm}${manualForm}</details>
+    ${sku ? '' : `<details class="sub" id="d-link" ${det('d-link', false)}><summary>Event link</summary><input id="evlink" value="${esc(e.link || '')}" placeholder="Paste the VEX event link here"></details>`}
+    <div class="foot"><button class="d" data-act="delev">Delete event and all its notes</button></div></div>
+  <div class="card"><h2>Alliance requests</h2><p class="mut">Teams that asked to ally with us, and what they say they’re good at.</p>
+    <div class="row"><input id="rq_t" list="tl" placeholder="Team #" class="narrow"><input id="rq_x" placeholder="Their strengths"><button data-act="addreq">Add</button></div>
+    ${notes('req').map(n => `<div class="note ${fresh(n)}"><div class="ntext"><b>${esc(n.ref)}</b> ${esc(tName(n.ref))} — ${esc(n.text)}</div><small>${esc(n.by || '')}<button class="d" data-act="delnote" data-id="${n.id}">Delete</button></small></div>`).join('')}</div>
+  <div class="card"><h2>Event notes</h2>${noteBox('event', '', '', 'Anything about this event…')}</div>`;
+  return h + settingsCard() + tlist();
 }
 const tlist = () => `<datalist id="tl">${teams().map(t => `<option value="${t.number}">${esc(t.name)}</option>`).join('')}</datalist>`;
 
+const segBar = (items, cur, act) => `<div class="seg" role="group">${items.map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" aria-pressed="${cur === k}" data-act="${act}" data-v="${k}">${l}</button>`).join('')}</div>`;
 function vTeams() {
-  if (!evObj()) return '<p class="mut">Pick an event first.</p>';
-  const seg = `<div class="seg">${[['list', 'All teams'], ['rank', 'Rankings']].map(([k, l]) => `<button class="${tv === k ? 'on' : ''}" data-act="tview" data-v="${k}">${l}</button>`).join('')}</div>`;
+  if (!evObj()) return empty('Pick an event first.');
+  const seg = segBar([['list', 'All teams'], ['rank', 'Rankings']], tv, 'tview');
   if (tv === 'rank') return seg + vRank();
-  return seg + `<div class="card"><h2>Add team</h2><div class="row"><input id="t_n" placeholder="Number e.g. 52111A"><input id="t_name" placeholder="Team name"><input id="t_s" placeholder="School"><button data-act="addteam">Add</button></div></div>
-  <input id="tsearch" placeholder="Search teams…" oninput="filt(this.value)">
-  <div id="tl2">${teams().map(t => `<div class="card ${t.number === US ? 'us' : ''}" data-q="${esc((t.number + t.name + t.school).toLowerCase())}"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;cursor:pointer" data-act="team" data-t="${t.number}"><span class="num">${t.number}</span>${esc(t.name)}<div class="mut">${esc(t.school)} · ${notes('scout', t.number).length + notes('team', t.number).length} notes</div></div><button class="d" data-act="delteam" data-id="${t.id}">✕</button></div></div>`).join('') || '<p class="mut">No teams yet.</p>'}</div>`;
+  const ts = teams(), q = tq.toLowerCase();
+  return seg + `<input id="tsearch" type="search" value="${esc(tq)}" placeholder="Search teams…" aria-label="Search teams">
+  <div class="card list" id="tl2">${ts.map(t => { const n = notes('scout', t.number).length + notes('team', t.number).length, hay = (t.number + t.name + t.school).toLowerCase();
+    return `<div class="trow ${t.number === US ? 'us' : ''}" data-act="team" data-t="${t.number}" data-q="${esc(hay)}" ${q && !hay.includes(q) ? 'style="display:none"' : ''}><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div><div class="mut">${esc(t.school)}${n ? ' · ' + n + (n === 1 ? ' note' : ' notes') : ''}</div></div><span class="chev" aria-hidden="true">›</span></div>` }).join('') || empty('No teams yet.')}</div>
+  <details class="card" id="d-addteam" ${det('d-addteam', !ts.length)}><summary><h2>Add a team manually</h2></summary><div class="row"><input id="t_n" placeholder="Number e.g. 52111A"><input id="t_name" placeholder="Team name"><input id="t_s" placeholder="School"><button class="p" data-act="addteam">Add</button></div></details>`;
 }
 function vRank() {
   const st = stats(), rows = [...st.by.entries()].map(([team, r]) => ({ ...r, team }));
@@ -263,47 +316,47 @@ function vRank() {
   const key = { rank: (a, b) => (a.div || 0) - (b.div || 0) || a.rank - b.rank, opr: (a, b) => (b.opr ?? -1e9) - (a.opr ?? -1e9), ccwm: (a, b) => (b.ccwm ?? -1e9) - (a.ccwm ?? -1e9) }[rks];
   rows.sort(key);
   return `<div class="card"><h2>Rankings</h2><p class="mut">${st.official ? 'Official rankings from VEX Events.' : 'Calculated from qualification scores (win points, then OPR). Official rankings replace these once VEX Events has them.'} OPR uses ${st.n} scored qualification ${st.n === 1 ? 'match' : 'matches'}.</p>
-  <div class="seg">${[['rank', 'Rank'], ['opr', 'OPR'], ['ccwm', 'CCWM']].map(([k, l]) => `<button class="${rks === k ? 'on' : ''}" data-act="rksort" data-v="${k}">Sort by ${l}</button>`).join('')}</div>
+  ${segBar([['rank', 'Rank'], ['opr', 'OPR'], ['ccwm', 'CCWM']].map(([k, l]) => [k, 'Sort by ' + l]), rks, 'rksort')}
   <div class="tblwrap"><table class="rk"><thead><tr><th>#</th><th>Team</th><th>W-L-T</th><th>WP</th><th class="wide">AP</th><th class="wide">SP</th><th>OPR</th><th class="wide">DPR</th><th>CCWM</th></tr></thead><tbody>
-  ${rows.map(r => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}"><td>${st.multiDiv ? 'D' + r.div + '·' : ''}${r.rank ?? '–'}</td><td><b>${esc(r.team)}</b></td><td>${rec(r)}</td><td>${r.wp ?? '–'}</td><td class="wide">${r.ap ?? '–'}</td><td class="wide">${r.sp ?? '–'}</td><td>${f1(r.opr)}</td><td class="wide">${f1(r.dpr)}</td><td>${sgn(r.ccwm)}</td></tr>`).join('')}
+  ${rows.map(r => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}"><td>${st.multiDiv ? 'D' + r.div + '·' : ''}${r.rank ?? '–'}</td><td><b>${esc(r.team)}</b></td><td>${rec(r)}</td><td>${r.wp ?? '–'}</td><td class="wide">${r.ap ?? '–'}</td><td class="wide">${r.sp ?? '–'}</td><td>${f1(r.opr)}</td><td class="wide">${f1(r.dpr)}</td><td>${sgn(r.ccwm)}</td></tr>`).join('')}
   </tbody></table></div>
   <p class="mut">OPR ≈ points a team adds to its alliance. DPR ≈ points the other alliance scores against it. CCWM = OPR − DPR, its effect on the winning margin. Tap a team for details.</p></div>`;
 }
-function filt(q) { q = q.toLowerCase(); document.querySelectorAll('#tl2 .card').forEach(c => c.style.display = c.dataset.q.includes(q) ? '' : 'none') }
+function filt(q) { q = q.toLowerCase(); document.querySelectorAll('#tl2 .trow').forEach(c => c.style.display = c.dataset.q.includes(q) ? '' : 'none') }
 
 const chips = (m, arr) => arr.map(n => `<button class="chip ${n === US ? 'me' : cls(m, n)}" data-act="team" data-t="${n}">${n}</button>`).join('');
 function vMatches() {
-  if (!evObj()) return '<p class="mut">Pick an event first.</p>';
+  if (!evObj()) return empty('Pick an event first.');
   const all = matches(), list = mf === 'all' ? all : all.filter(m => side(m));
-  let h = `<div class="seg">${[['ours', 'Our matches'], ['all', 'All matches']].map(([k, l]) => `<button class="${mf === k ? 'on' : ''}" data-act="mfilter" data-v="${k}">${l}</button>`).join('')}</div>`;
+  let h = segBar([['ours', 'Our matches'], ['all', 'All matches']], mf, 'mfilter');
   h += list.map(m => {
     const s = side(m), o = open[m.id];
     let res = '';
     if (s && scored(m)) { const a = s === 'red' ? m.rs : m.bs, b = s === 'red' ? m.bs : m.rs; res = a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }
-    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" data-act="mopen" data-id="${m.id}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${m.rs}–${m.bs}</span>` : ''}${res}<span class="grow"></span>${s ? `<span class="tag ${s}">We’re ${s}</span>` : ''}<span aria-hidden="true">${o ? '▲' : '▼'}</span></div>
+    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" data-act="mopen" data-id="${m.id}" role="button" aria-expanded="${!!o}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${m.rs}–${m.bs}</span>` : ''}${res}<span class="grow"></span>${s ? `<span class="tag ${s}">We’re ${s}</span>` : ''}<span class="chev ${o ? 'up' : ''}" aria-hidden="true">›</span></div>
     <div class="vs"><div class="side r"><span>Red alliance</span>${chips(m, m.red)}</div><div class="side b"><span>Blue alliance</span>${chips(m, m.blue)}</div></div>
-    ${o ? (s ? `<h3>Strategy</h3>${noteBox('match', m.id, 'strat', 'Our strategy for this match…')}<h3>Our alliance</h3>${noteBox('match', m.id, 'ally', 'What our partner said / their plan…')}<h3>Opposition</h3>${noteBox('match', m.id, 'opp', 'Weaknesses, tendencies…')}`
-        : `<h3>Notes</h3>${noteBox('match', m.id, 'gen', 'What happened in this match…')}`) + `<button class="d" data-act="clearmatch" data-id="${m.id}">Clear all notes for this match</button> <button class="d" data-act="delmatch" data-id="${m.id}">Delete match</button>` : ''}</div>`
-  }).join('') || `<p class="mut">${mf === 'all' ? 'No matches yet.' : 'No matches with us yet.'}</p>`;
-  h += `<details class="card" ${all.length ? '' : 'open'}><summary><h2>Add a match manually</h2></summary><div class="row"><input id="m_l" placeholder="Label e.g. Q12"><input id="m_o" type="number" inputmode="numeric" placeholder="Match number (for sorting)"></div>
+    ${o ? `<div class="mx ${justOpened === m.id ? 'reveal' : ''}">` + (s ? `<h3>Strategy</h3>${noteBox('match', m.id, 'strat', 'Our strategy for this match…')}<h3>Our alliance</h3>${noteBox('match', m.id, 'ally', 'What our partner said / their plan…')}<h3>Opposition</h3>${noteBox('match', m.id, 'opp', 'Weaknesses, tendencies…')}`
+        : `<h3>Notes</h3>${noteBox('match', m.id, 'gen', 'What happened in this match…')}`) + `<div class="foot"><button class="d" data-act="clearmatch" data-id="${m.id}">Clear all notes for this match</button><button class="d" data-act="delmatch" data-id="${m.id}">Delete match</button></div></div>` : ''}</div>`
+  }).join('') || empty(mf === 'all' ? 'No matches yet.' : 'No matches with us yet.');
+  h += `<details class="card" id="d-addmatch" ${det('d-addmatch', !all.length)}><summary><h2>Add a match manually</h2></summary><div class="row"><input id="m_l" placeholder="Label e.g. Q12"><input id="m_o" type="number" inputmode="numeric" placeholder="Match number (for sorting)"></div>
   <h3>Red alliance</h3><div class="row"><input id="m_r1" list="tl" placeholder="Team"><input id="m_r2" list="tl" placeholder="Team"></div>
   <h3>Blue alliance</h3><div class="row"><input id="m_b1" list="tl" placeholder="Team"><input id="m_b2" list="tl" placeholder="Team"></div>
-  <p><button data-act="addmatch">Add match</button></p>${tlist()}</details>`;
+  <div class="foot"><button class="p" data-act="addmatch">Add match</button></div>${tlist()}</details>`;
   return h;
 }
 
-const R = (f, v) => `<div class="rate">${[1, 2, 3, 4, 5].map(i => `<button data-act="rate" data-f="${f}" data-v="${i}" class="${v === i ? 'on' : ''}">${i}</button>`).join('')}</div>`;
+const R = (f, v) => `<div class="rate" role="group">${[1, 2, 3, 4, 5].map(i => `<button data-act="rate" data-f="${f}" data-v="${i}" class="${v === i ? 'on' : ''}" aria-pressed="${v === i}">${i}</button>`).join('')}</div>`;
 function vScout() {
-  if (!evObj()) return '<p class="mut">Pick an event first.</p>';
+  if (!evObj()) return empty('Pick an event first.');
   if (!name) return `<div class="card"><h2>Who’s scouting?</h2><p class="mut">Pick your name. You can scout each team once overall, plus once per match you watch, and come back to edit.</p>${nameChips()}</div>`;
   const ms = matches();
   if (scTeam && draft) {
     const d = draft, tms = ms.filter(m => m.red.includes(scTeam) || m.blue.includes(scTeam));
     const rel = m => { const s = side(m, scTeam); return s === 'ally' ? ' · with us' : s === 'opp' ? ' · against us' : '' };
-    return `<p><button class="g" data-act="donescout">‹ Back to teams</button></p>
-    <div class="card" style="border:2px solid var(--accent)"><h2><span class="num">${scTeam}</span> ${esc(tName(scTeam))}</h2>
+    return `<button class="link back" data-act="donescout">‹ Back to teams</button>
+    <div class="card"><h2><span class="num">${scTeam}</span> ${esc(tName(scTeam))}</h2>
     <h3>What are you scouting?</h3><select id="scm"><option value="">Overall / pit scouting (not one match)</option>${tms.map(m => `<option value="${esc(m.id)}" ${d.match === m.id ? 'selected' : ''}>Match ${esc(m.label)}${rel(m)}${scored(m) ? ' · played' : ''}</option>`).join('')}</select>
-    <div class="rem">Remember to note: autonomous points & consistency · driver skill & consistency · robot type & design · speed · scoring · consistency · durability · overall.</div>
+    <p class="mut hint">Remember to note: autonomous points & consistency · driver skill & consistency · robot type & design · speed · scoring · consistency · durability · overall.</p>
     <h3>Autonomous</h3><input data-f="autoPts" value="${esc(d.autoPts)}" placeholder="Auto points they score"><div class="mut">Auto consistency</div>${R('autoCons', d.autoCons)}<textarea data-f="autoNotes" placeholder="What does their auto do?">${esc(d.autoNotes)}</textarea>
     <h3>Driver</h3><div class="mut">Driver skill</div>${R('driver', d.driver)}<div class="mut">Driver consistency</div>${R('driverCons', d.driverCons)}<textarea data-f="driveNotes" placeholder="Driving notes (how they drive, strategy, mistakes, how well they play defence, etc.)">${esc(d.driveNotes)}</textarea>
     <h3>Robot</h3><input data-f="robotType" value="${esc(d.robotType)}" placeholder="Robot type & design (drivetrain, intake, scorer…)">
@@ -317,12 +370,12 @@ function vScout() {
     <h3>Overall</h3><div class="mut">Overall rating</div>${R('overall', d.overall)}
     <select data-f="good"><option value="">Are they good?</option>${['Yes', 'Decent', 'No'].map(o => `<option ${d.good === o ? 'selected' : ''}>${o}</option>`).join('')}</select>
     <textarea data-f="comments" placeholder="Other comments, weaknesses…">${esc(d.comments)}</textarea>
-    <p class="mut">✔ Autosaves as you go${online ? '' : ' (kept on this phone until you’re back online)'}.</p><div class="row"><button data-act="resetdraft" class="g">Reset</button><button data-act="donescout">Done – back to teams</button></div></div>`;
+    <div class="foot"><span class="mut grow">✔ Autosaves as you go${online ? '' : ' (kept on this phone until you’re back online)'}.</span><button class="d" data-act="resetdraft">Reset</button><button class="p" data-act="donescout">Done</button></div></div>`;
   }
   const rel = n => { const a = [], o = []; ms.forEach(x => { const s = side(x, n); if (n === US || !s) return; (s === 'ally' ? a : o).push(x.label.replace(/^Mock /, '')) }); return { a, o } };
-  return `<div class="card"><h2>Pick a team to scout</h2><p class="mut">Scouting as <b>${esc(name)}</b> <button class="d" data-act="setname" data-v="">change</button></p><p class="mut">Green = we play with them · Red = we play against them · Half and half = both</p>${teams().filter(t => t.number !== US).map(t => {
+  return `<div class="card"><h2>Pick a team to scout</h2><p class="mut">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></p><p class="mut">Green = we play with them · Red = we play against them · Half and half = both</p>${teams().filter(t => t.number !== US).map(t => {
     const r = rel(t.number), c = r.a.length && !r.o.length ? 'gn' : r.o.length && !r.a.length ? 'rd' : r.a.length && r.o.length ? 'both' : '', mine = myScouts(t.number).length;
-    return `<div class="trow ${scTeam === t.number ? 'sel' : ''}" data-act="startscout" data-t="${t.number}"><span class="chip ${c}">${t.number}</span><div style="flex:1"><div>${esc(t.name)}</div>${mine ? `<div class="lab" style="color:var(--accent-text)">✓ You’ve scouted this${mine > 1 ? ' (' + mine + ' entries)' : ''}</div>` : ''}${r.a.length ? `<div class="lab g">With us: ${r.a.join(', ')}</div>` : ''}${r.o.length ? `<div class="lab r">Against us: ${r.o.join(', ')}</div>` : ''}${!r.a.length && !r.o.length ? '<span class="mut">Not in a match with us</span>' : ''}</div></div>`
+    return `<div class="trow ${scTeam === t.number ? 'sel' : ''}" data-act="startscout" data-t="${t.number}"><span class="chip ${c}">${t.number}</span><div style="flex:1"><div>${esc(t.name)}</div>${mine ? `<div class="lab" style="color:var(--accent-text)">✓ You’ve scouted this${mine > 1 ? ' (' + mine + ' entries)' : ''}</div>` : ''}${r.a.length ? `<div class="lab g">With us: ${r.a.join(', ')}</div>` : ''}${r.o.length ? `<div class="lab r">Against us: ${r.o.join(', ')}</div>` : ''}${!r.a.length && !r.o.length ? '<span class="mut">Not in a match with us</span>' : ''}</div><span class="chev" aria-hidden="true">›</span></div>`
   }).join('') || '<span class="mut">Add teams first.</span>'}</div>`;
 }
 function newDraft(t, matchId) {
@@ -333,7 +386,8 @@ function loadDraft(t, matchId) { const id = scoutId(t, name, matchId), ex = S.no
 let saveT = null;
 function saveDraft(ms = 600) { clearTimeout(saveT); saveT = setTimeout(flushDraft, ms) }
 // Write the draft now if an autosave is pending (called before leaving the form so the last edits aren't lost).
-function flushDraft() { if (saveT === null) return; clearTimeout(saveT); saveT = null; if (draft) { draft.by = name; put('notes', draft.id, { ...draft }) } }
+// It's sent quietly: the form already shows what was typed, so there's nothing to re-render.
+function flushDraft() { if (saveT === null) return; clearTimeout(saveT); saveT = null; if (draft) { draft.by = name; send({ col: 'notes', id: draft.id, data: { ...draft }, mode: 'set' }, true) } }
 const sum = n => `<div class="note"><b>${n.matchLabel ? 'Match ' + esc(n.matchLabel) : 'Overall'}</b> <small>${esc(n.by || '')} · ${when(n.ts)}</small>
  Auto: ${esc(n.autoPts || '-')} pts, consistency ${n.autoCons || '-'}/5 ${esc(n.autoNotes || '')}
  Driver ${n.driver || '-'}/5 (consistency ${n.driverCons || '-'}/5) ${esc(n.driveNotes || '')}
@@ -345,65 +399,95 @@ const sum = n => `<div class="note"><b>${n.matchLabel ? 'Match ' + esc(n.matchLa
  ${esc(n.comments || '')}</div>`;
 
 function vTeam(num) {
-  if (num === US) return `<div class="row" style="flex-wrap:nowrap"><h2 style="flex:1"><span class="num" style="font-size:34px">${esc(num)}</span> ${esc(tName(num) || 'Us')}</h2><button class="g" data-act="close">Close</button></div><div class="card">That’s us. Scouting and team notes are turned off for our own team.</div>`;
+  const head = (title, sub) => `<div class="sheethead"><div class="grow"><h2>${title}</h2>${sub ? `<div class="mut">${sub}</div>` : ''}</div><button data-act="close">Close</button></div>`;
+  if (num === US) return head(`<span class="num">${esc(num)}</span> ${esc(tName(num) || 'Us')}`) + `<div class="card">That’s us. Scouting and team notes are turned off for our own team.</div>`;
   const t = teams().find(x => x.number === num) || { number: num, name: '', school: '' };
   const ms = matches().filter(m => m.red.includes(num) || m.blue.includes(num));
   const sc = notes('scout', num);
   const avg = f => { const v = sc.map(s => parseFloat(s[f])).filter(x => x > 0); return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-' };
-  return `<div class="row" style="flex-wrap:nowrap"><h2 style="flex:1">${esc(num)} ${esc(t.name)}</h2><button class="g" data-act="close">Close</button></div><div class="mut">${esc(t.school)}</div>
+  return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) + `
   ${(() => { const st = stats(), r = st.by.get(num); return r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '' })()}
   <div class="card"><b>Averages</b> (${sc.length} ${sc.length === 1 ? 'entry' : 'entries'})<div class="mut">Auto ${avg('autoPts')} pts · Driver ${avg('driver')} · Speed ${avg('speed')} · Scoring ${avg('scoring')} · Durability ${avg('durability')} · Overall ${avg('overall')}</div></div>
   <div class="card"><h2>Matches</h2>${ms.map(m => `<span class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}">${esc(m.label)}</span>`).join('') || '<span class="mut">None</span>'}</div>
-  <div class="card"><h2>Notes on this team</h2>${noteBox('team', num, '', 'Add a note about ' + num + '…')}${notes('team', num).length ? `<button class="d" data-act="clearnotes" data-t="${num}">Clear all notes on this team</button>` : ''}</div>
-  <div class="card"><h2>Scouting entries</h2>${sc.map(s => sum(s)).join('') || '<span class="mut">None yet</span>'}${sc.length ? `<button class="d" data-act="clearscout" data-t="${num}">Clear all scouting entries</button>` : ''}</div>
-  <div class="card"><h2>Alliance requests</h2>${notes('req', num).map(n => `<div class="note">${esc(n.text)}</div>`).join('') || '<span class="mut">None</span>'}</div>`;
+  <div class="card"><h2>Notes on this team</h2>${noteBox('team', num, '', 'Add a note about ' + num + '…')}${notes('team', num).length ? `<div class="foot"><button class="d" data-act="clearnotes" data-t="${num}">Clear all notes on this team</button></div>` : ''}</div>
+  <div class="card"><h2>Scouting entries</h2>${sc.map(s => sum(s)).join('') || '<span class="mut">None yet</span>'}${sc.length ? `<div class="foot"><button class="d" data-act="clearscout" data-t="${num}">Clear all scouting entries</button></div>` : ''}</div>
+  <div class="card"><h2>Alliance requests</h2>${notes('req', num).map(n => `<div class="note">${esc(n.text)}</div>`).join('') || '<span class="mut">None</span>'}</div>
+  ${t.id ? `<div class="foot"><button class="d" data-act="delteam" data-id="${t.id}">Remove team from this event</button></div>` : ''}`;
 }
 
 function vPick() {
-  const e = evObj(); if (!e) return '<p class="mut">Pick an event first.</p>';
+  const e = evObj(); if (!e) return empty('Pick an event first.');
   const p = e.picks || [], avail = teams().filter(t => t.number !== US && !p.includes(t.number));
-  return `<div class="card"><h2>Finals picklist</h2><p class="mut">Hold the ≡ handle and drag to reorder, or use the arrows. #1 is who we want most.</p><div id="pklist">${p.map((n, i) => `<div class="pk" data-i="${i}"><span class="grip" title="Drag to reorder">≡</span><span class="num" style="width:34px;color:var(--accent-text)">${i + 1}</span><div style="flex:1;cursor:pointer" data-act="team" data-t="${n}"><span class="num">${n}</span>${esc(tName(n))}<div class="mut">${(r => r ? 'Rank ' + (r.rank ?? '–') + ' · OPR ' + f1(r.opr) + ' · ' : '')(stats().by.get(n))}${notes('req', n).length ? 'Asked to ally · ' : ''}${notes('scout', n).length} scouting entries</div></div><span class="arrows"><button class="g" data-act="pup" data-i="${i}" aria-label="Move up" ${i ? '' : 'disabled'}>▲</button><button class="g" data-act="pdn" data-i="${i}" aria-label="Move down" ${i < p.length - 1 ? '' : 'disabled'}>▼</button></span><button class="d" data-act="prm" data-i="${i}">Remove</button></div>`).join('') || '<p class="mut">Nothing yet. Tap a team below to add it.</p>'}</div></div>
+  return `<div class="card"><h2>Finals picklist</h2><p class="mut">Hold the ≡ handle and drag to reorder, or use the arrows. #1 is who we want most.</p><div id="pklist">${p.map((n, i) => `<div class="pk" data-i="${i}" data-flip="${esc(n)}"><span class="grip" title="Drag to reorder">≡</span><span class="num" style="width:34px;color:var(--accent-text)">${i + 1}</span><div style="flex:1;cursor:pointer" data-act="team" data-t="${n}"><span class="num">${n}</span>${esc(tName(n))}<div class="mut">${(r => r ? 'Rank ' + (r.rank ?? '–') + ' · OPR ' + f1(r.opr) + ' · ' : '')(stats().by.get(n))}${notes('req', n).length ? 'Asked to ally · ' : ''}${notes('scout', n).length} scouting entries</div></div><span class="arrows"><button data-act="pup" data-i="${i}" aria-label="Move up" ${i ? '' : 'disabled'}>▲</button><button data-act="pdn" data-i="${i}" aria-label="Move down" ${i < p.length - 1 ? '' : 'disabled'}>▼</button></span><button class="d x" data-act="prm" data-i="${i}" aria-label="Remove ${esc(n)}">×</button></div>`).join('') || empty('Nothing yet. Tap a team below to add it.')}</div></div>
   <div class="card"><h2>Still to pick</h2><p class="mut">Tap a team to add it to the list.</p>${avail.map(t => `<button class="chip" data-act="addpick" data-t="${t.number}">${t.number}</button>`).join('') || '<span class="mut">Every team is on the list.</span>'}</div>`;
 }
 const setPicks = p => upd('events', ev, { picks: p });
 
 // ---------- events ----------
-function sure(b) { if (b.dataset.armed) return true; const t = b.textContent; b.dataset.armed = 1; b.textContent = 'Tap again to confirm'; b.style.fontWeight = 700; setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = t; b.style.fontWeight = '' } }, 3000); return false }
+function sure(b) {
+  if (b.dataset.armed) return true;
+  const t = b.textContent; b.dataset.armed = 1; b.classList.add('armed'); b.textContent = 'Tap again to confirm';
+  setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.classList.remove('armed'); b.textContent = t } }, 3000);
+  return false;
+}
+// Clipboard API needs https; on a plain-http preview (phone on the same wifi) fall back to the old copy command.
+function copyText(t) {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
+  return new Promise((ok, fail) => { const ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); let done = false; try { done = document.execCommand('copy') } catch (e) {} ta.remove(); done ? ok() : fail() });
+}
+function doImport(sku, msgEl) {
+  if (msgEl) msgEl.textContent = 'Importing…';
+  api('/import', { sku: norm(sku) }).then(d => { ev = d.eventId; ls('ev', ev); if (msgEl) msgEl.textContent = ''; toast(`Imported ${d.teams} teams and ${d.matches} matches`); return pull() })
+    .catch(e => { if (msgEl) msgEl.textContent = 'Failed: ' + String(e.message || e).slice(0, 140) });
+}
 document.addEventListener('click', e => {
+  if (e.target.id === 'modal') { closeModal(); return } // tap outside the team sheet
   const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act, v = id => $('#' + id)?.value?.trim() || '';
   const me = name || 'Someone';
   if (a === 'tab') { flushDraft(); tab = b.dataset.v; ls('tab', tab); render() }
   else if (a === 'login') { code = $('#codein').value.trim(); loginErr = false; api('/login', {}).then(() => { ls('code', code); online = true; return flush().then(pull) }).then(schedule).catch(e => { if (e instanceof NetErr) toast('Can’t reach the server. Check your connection.') }) }
+  else if (a === 'peek') { const i = $('#codein'), show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.setAttribute('aria-pressed', show); b.setAttribute('aria-label', show ? 'Hide code' : 'Show code'); b.innerHTML = show ? EYE_OFF : EYE; i.focus() }
+  else if (a === 'showcode') { const c = $('#codeval'), show = c.dataset.shown !== '1'; c.dataset.shown = show ? '1' : '0'; c.textContent = show ? code : '•'.repeat(Math.max(6, code.length)); b.textContent = show ? 'Hide' : 'Show'; b.setAttribute('aria-pressed', show) }
+  else if (a === 'copycode') copyText(code).then(() => toast('Team code copied'), () => toast('Couldn’t copy – tap Show and copy it by hand'));
   else if (a === 'logout') { if (sure(b)) { if (outbox.length && !confirm(outbox.length + ' changes haven’t been sent yet and will be lost. Log out anyway?')) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); schedule(); render(); setStatus() } }
-  else if (a === 'import') { const m = $('#impmsg'); m.textContent = 'Importing…'; api('/import', { sku: norm(v('sku')) }).then(d => { ev = d.eventId; ls('ev', ev); return pull() }).catch(e => { m.textContent = 'Failed: ' + String(e.message || e).slice(0, 140) }) }
+  else if (a === 'import') doImport(v('sku'), $('#impmsg'));
+  else if (a === 'reimport') doImport(skuOf(evObj()), $('#impmsg2'));
   else if (a === 'team') { mTeam = b.dataset.t; render() }
-  else if (a === 'close') { mTeam = null; render() }
+  else if (a === 'close') closeModal();
   else if (a === 'addev') { const n = v('newev'); if (n) { const id = uid(); put('events', id, { name: n, link: '', picks: [] }); ev = id; ls('ev', id) } }
   else if (a === 'delev') { if (sure(b)) { send({ purge: ev }); ev = S.events[0] ? S.events[0].id : ''; ls('ev', ev) } }
   else if (a === 'savecfg') { const us = norm(v('cfg_us')) || DEFAULT_US, names = [...new Set(v('cfg_names').split(',').map(s => s.trim()).filter(Boolean))]; put('config', 'main', { us, names: names.length ? names : DEFAULT_NAMES }); toast('Settings saved') }
   else if (a === 'addteam') { const n = norm(v('t_n')); if (n) put('teams', ev + '_' + n, { eventId: ev, number: n, name: v('t_name'), school: v('t_s') }) }
-  else if (a === 'delteam') { if (sure(b)) del('teams', b.dataset.id) }
+  else if (a === 'delteam') { if (sure(b)) { del('teams', b.dataset.id); closeModal() } }
   else if (a === 'addmatch') {
     const r = ['m_r1', 'm_r2'].map(i => norm(v(i))).filter(Boolean), bl = ['m_b1', 'm_b2'].map(i => norm(v(i))).filter(Boolean);
     if (v('m_l') && (r.length || bl.length)) put('matches', uid(), { eventId: ev, label: v('m_l'), order: +v('m_o') || matches().length + 1, red: r, blue: bl })
   }
   else if (a === 'delmatch') { if (sure(b)) del('matches', b.dataset.id) }
-  else if (a === 'mopen') { open[b.dataset.id] = !open[b.dataset.id]; render() }
+  else if (a === 'mopen') { const id = b.dataset.id; open[id] = !open[id]; justOpened = open[id] ? id : null; render() }
+  else if (a === 'mfilter') { mf = b.dataset.v; ls('mf', mf); render() }
   else if (a === 'tview') { tv = b.dataset.v; ls('tv', tv); render() }
   else if (a === 'rksort') { rks = b.dataset.v; ls('rks', rks); render() }
-  else if (a === 'mfilter') { mf = b.dataset.v; ls('mf', mf); render() }
-  else if (a === 'addnote') { const t = $('#' + b.dataset.in).value.trim(); if (t && !(b.dataset.kind === 'team' && b.dataset.ref === US)) put('notes', uid(), { eventId: ev, kind: b.dataset.kind, ref: b.dataset.ref, sec: b.dataset.sec, text: t, by: me, ts: Date.now() }); $('#' + b.dataset.in).value = '' }
+  else if (a === 'addnote') {
+    const ta = $('#' + b.dataset.in), t = ta.value.trim();
+    if (t && !(b.dataset.kind === 'team' && b.dataset.ref === US)) put('notes', uid(), { eventId: ev, kind: b.dataset.kind, ref: b.dataset.ref, sec: b.dataset.sec, text: t, by: me, ts: Date.now() });
+    delete drafts[ta.dataset.draft]; ta.value = ''; ta.closest('.composer').classList.remove('has');
+  }
   else if (a === 'delnote') { if (sure(b)) del('notes', b.dataset.id) }
   else if (a === 'addreq') { const t = norm(v('rq_t')); if (t && t !== US && v('rq_x')) put('notes', uid(), { eventId: ev, kind: 'req', ref: t, text: v('rq_x'), by: me, ts: Date.now() }) }
   else if (a === 'clearnotes') { if (sure(b)) notes('team', b.dataset.t).forEach(n => del('notes', n.id)) }
   else if (a === 'clearscout') { if (sure(b)) { notes('scout', b.dataset.t).forEach(n => del('notes', n.id)); if (scTeam === b.dataset.t) { saveT = null; draft = null; scTeam = '' } } }
   else if (a === 'clearmatch') { if (sure(b)) notes('match', b.dataset.id).forEach(n => del('notes', n.id)) }
-  else if (a === 'startscout') { if (!name || b.dataset.t === US) return; flushDraft(); scTeam = b.dataset.t; loadDraft(scTeam, ''); render(); scrollTo(0, 0) }
-  else if (a === 'donescout') { flushDraft(); scTeam = ''; draft = null; render(); scrollTo(0, 0) }
-  else if (a === 'resetdraft') { if (sure(b)) { draft = { ...newDraft(scTeam, draft.match), id: draft.id }; saveDraft(0); render() } }
+  else if (a === 'startscout') { if (!name || b.dataset.t === US) return; flushDraft(); scTeam = b.dataset.t; loadDraft(scTeam, ''); render() }
+  else if (a === 'donescout') { flushDraft(); scTeam = ''; draft = null; render() }
+  else if (a === 'resetdraft') { if (sure(b)) { draft = { ...newDraft(scTeam, draft.match), id: draft.id }; saveDraft(0); lastView = ''; render() } }
   else if (a === 'setname') { flushDraft(); scTeam = ''; draft = null; name = b.dataset.v; ls('name', name); render() }
   else if (a === 'theme') { ls('theme', (ls('theme') || 'light') === 'dark' ? 'light' : 'dark'); applyTheme() }
-  else if (a === 'rate') { draft[b.dataset.f] = draft[b.dataset.f] == +b.dataset.v ? 0 : +b.dataset.v; saveDraft(0); render() }
+  else if (a === 'rate') { // update in place so the choice eases across instead of the whole form redrawing
+    const f = b.dataset.f; draft[f] = draft[f] == +b.dataset.v ? 0 : +b.dataset.v;
+    b.parentElement.querySelectorAll('button').forEach(x => { const on = +x.dataset.v === draft[f]; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) });
+    saveDraft(0);
+  }
   else if (a === 'addpick') { const n = b.dataset.t; const p = evObj().picks || []; if (n && !p.includes(n)) setPicks([...p, n]) }
   else if (a === 'pup' || a === 'pdn') { const p = [...evObj().picks], i = +b.dataset.i, j = a === 'pup' ? i - 1 : i + 1; if (j >= 0 && j < p.length) { [p[i], p[j]] = [p[j], p[i]]; setPicks(p) } }
   else if (a === 'prm') { const p = [...evObj().picks]; p.splice(+b.dataset.i, 1); setPicks(p) }
@@ -412,11 +496,13 @@ let linkT;
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.dataset.f && draft && tab === 'scout') { draft[t.dataset.f] = t.value; saveDraft() }
+  else if (t.dataset.draft) { drafts[t.dataset.draft] = t.value; t.closest('.composer').classList.toggle('has', !!t.value.trim()) }
+  else if (t.id === 'tsearch') { tq = t.value; filt(tq) }
   else if (t.id === 'evlink') { const id = ev, val = t.value.trim(); clearTimeout(linkT); linkT = setTimeout(() => upd('events', id, { link: val }), 600) }
 });
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.id === 'evsel') { ev = t.value; ls('ev', ev); render() }
+  if (t.id === 'evsel') { ev = t.value; ls('ev', ev); t.blur(); render() }
   else if (t.id === 'scm') { flushDraft(); loadDraft(scTeam, t.value); t.blur(); render() }
   else if (t.dataset.f && draft && tab === 'scout') { draft[t.dataset.f] = t.value; saveDraft(0) }
 });

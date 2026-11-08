@@ -27,6 +27,14 @@
   :root { --control-h: 44px; }
 }
 
+/* ---- motion: short and calm. Everything turns off with the OS "reduce motion" setting (see app.css). */
+:root {
+  --dur-1: 120ms; /* hover, press, colour changes */
+  --dur-2: 200ms; /* things appearing: views, sections, notes */
+  --dur-3: 260ms; /* sheets and rows moving */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
 /* ---- neutrals */
 :root {
   --ground: #202124;
