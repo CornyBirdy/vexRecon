@@ -14,16 +14,26 @@ Every team's scouting is private to that team. Event lists, matches and rankings
 3. Teammates open Recon, tap **Join your team** and enter your team number and the code.
 4. On the Event tab, type your event code (e.g. `RE-V5RC-26-5068`) and press **Import**.
 
-Lost the code? Anyone already signed in can see it in **Team settings** (bottom of the Event tab), and can make a
+Lost the code? Anyone already signed in can see it in **Team settings** (Event tab → More), and can make a
 new one there; the old one then stops working on every phone.
 
 ## What's in it
 - **Matches**: your matches or all of them, scores, W/L, and strategy / partner / opposition notes per match.
+- **Event tab**: one place for the event. The picker sits on top, then **Teams** (searchable, with rank, skills and OPR on
+  each row), **Rankings**, **Skills** and **More** (event notes, import another event, team settings).
 - **Scouting**: the Scout tab is the one place to write it (a team's page has a **Scout this team** button that opens it).
   One overall entry per scout per team, plus one per match watched; averages on each team's page. The list opens on
-  **To scout** so you can see what's left.
+  **To scout** so you can see what's left. The form is split into titled sections (Autonomous, Driver, Robot, Scoring,
+  Toggle, Overall); every field keeps its label once filled in, ratings say what 1 and 5 mean, and **Toggle mechanism**
+  is a text box for describing how they toggle. Saved entries are shown grouped and labelled.
 - **Rankings & OPR**: official rankings from VEX Events (refreshed with the scores), OPR / DPR / CCWM worked out
-  from qualification scores, calculated standings until the official ones exist.
+  from qualification scores, calculated standings until the official ones exist. Average and high score per match too.
+- **Skills & season stats** (Event tab → Skills, and each team's page): works with no matches being played. For every team
+  at the event: highest and average driver and autonomous (programming) skills, the combined score and who leads the field,
+  for the whole season or just this event. A team's page adds its season record and win rate, average and high score, every
+  event it has played and its awards. It comes from VEX Events for the whole season, so the event must be imported with its
+  event code. The server loads it a few teams at a time (about a minute for a full event, 3 requests per team) the first
+  time an event is opened and again once it is 6 hours old; **Refresh** on the Skills page loads it now.
 - **Picklist**: drag or use the arrows; rank and OPR shown on each row. Alliance requests live here too, with an **Add to picklist** button.
 - **Live and offline**: teammates' changes show up within seconds; with no signal, changes are kept on the phone
   and sent when it's back (the header shows `Offline · 3 unsaved`).

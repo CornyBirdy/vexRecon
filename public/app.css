@@ -145,11 +145,6 @@ input[type=search]{-webkit-appearance:none;appearance:none}
 .scouthead{display:flex;justify-content:space-between;align-items:center;gap:var(--s-3);margin:var(--s-2) var(--s-1) 0}
 .rels{margin-top:2px}.rel{font-size:13px;font-weight:600;margin-right:var(--s-3)}.rel.g{color:var(--success)}.rel.r{color:var(--danger)}
 .tick{font-size:13px;font-weight:700;color:var(--accent-text);white-space:nowrap}
-.scoutform h3{margin-top:var(--s-5)}
-.scoutform textarea{min-height:60px}
-.fld{display:flex;align-items:center;gap:var(--s-3);margin:var(--s-1) 0}
-.fld>span{flex:1;font-size:14px;color:var(--ink-muted)}
-.fld .rate{flex:0 0 min(215px,64%)}.fld .rate button{min-height:38px}
 
 /* login: show / hide the team code */
 .login{max-width:420px;margin:var(--s-6) auto}
@@ -203,3 +198,45 @@ body.out main,body.out #app{flex:1;display:flex;flex-direction:column;width:100%
 body.out main{padding-bottom:0}
 body.out .welcome{flex:1;display:flex;flex-direction:column;width:100%}
 body.out .welcome .credit{margin-top:auto;padding:var(--s-6) 0 var(--s-4)}
+
+/* ---------- scouting form: labelled fields in titled sections ---------- */
+.card.sect{padding-top:var(--s-3)}
+.sech{border-bottom:1px solid var(--hairline);margin:calc(-1 * var(--s-1)) 0 var(--s-1);padding-bottom:var(--s-2)}.sech h2{margin:0}.sech p{margin:2px 0 0}
+.ff{margin:var(--s-3) 0 0}
+.ff>label,.ff>.lbl{display:block;font-size:14.5px;font-weight:600;color:var(--ink)}
+.ff>.hint{margin:1px 0 var(--s-1)}
+.ff input,.ff select,.ff textarea{margin-top:var(--s-1)}
+.ff>.rate{margin-top:var(--s-2)}
+.scale{display:flex;justify-content:space-between;gap:var(--s-3);font-size:12px;color:var(--ink-muted);margin-top:var(--s-1)}
+.scale span:last-child{text-align:right}
+
+/* team picker groups */
+.ghead{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-2) 6px var(--s-1)}.ghead h3{margin:0;flex:1}
+.ghead .chip{width:14px;height:14px;padding:0;margin:0;border-width:3px;border-radius:var(--r-xs)}
+
+/* a saved scouting entry */
+.note.entry{white-space:normal}
+.ehead{display:flex;align-items:baseline;gap:var(--s-2);flex-wrap:wrap;margin-bottom:var(--s-1)}.ehead b{font-size:15px}.ehead .mut{font-size:12.5px}
+.sg{margin-top:var(--s-2)}
+.sg h4{margin:0 0 2px;font:700 11.5px/1.2 var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--accent-text)}
+.kv{display:flex;justify-content:space-between;gap:var(--s-3);padding:2px 0;font-size:14.5px}.kv span{color:var(--ink-muted)}.kv b{font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.kv.txt{display:block}.kv.txt>div{white-space:pre-wrap;word-break:break-word}
+
+/* stat tiles (skills, season record, scouting averages) */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:var(--s-2);margin:var(--s-2) 0}
+.tile{background:var(--surface-sunken);border:1px solid var(--hairline);border-radius:var(--r-sm);padding:var(--s-2) var(--s-3);display:flex;flex-direction:column;min-width:0}
+.tile b{font:700 22px/1.15 var(--font);font-variant-numeric:tabular-nums}
+.tile span{font-size:12.5px;font-weight:600;color:var(--ink-muted)}
+.tile small{font-size:12px;color:var(--ink-muted)}
+
+/* skills table + team sheet tables */
+.rk td.hi{font-weight:700;color:var(--accent-text)}
+.rk.sm tbody tr{cursor:default}.rk.sm tbody tr:hover td{background:none}
+.rk.sm th:first-child,.rk.sm td:first-child{color:var(--ink);white-space:normal;min-width:110px}
+.rk.sm small{display:block;line-height:1.2}
+.rk.sm th:nth-child(2),.rk.sm td:nth-child(2){text-align:right}
+.rk small{color:var(--ink-muted);font-size:11.5px}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:var(--r-xs);background:var(--accent-soft);color:var(--accent-text);vertical-align:1px}
+.award{padding:6px 0;border-top:1px solid var(--hairline)}.award:first-of-type{border-top:0}
+.tstat{font-variant-numeric:tabular-nums}
+.stmsg{font-size:13px}

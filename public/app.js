@@ -15,9 +15,11 @@ const slug = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const APP = { name: 'Recon', version: '1.0.0' };
 // Signed in as one team: its number is "us" everywhere. Scout names are the team's own list (Team settings).
 let US = '', NAMES = [];
-const COLS = ['events', 'teams', 'matches', 'notes', 'config', 'rankings'];
-let S = { events: [], teams: [], matches: [], notes: [], config: [], rankings: [] };
-let ev = ls('ev'), tab = ls('tab') || 'event', name = ls('name'), mf = ls('mf') || 'ours', sf = ls('sf') || 'todo', tv = ls('tv') || 'list', rks = ls('rks') || 'rank';
+const COLS = ['events', 'teams', 'matches', 'notes', 'config', 'rankings', 'stats'];
+let S = { events: [], teams: [], matches: [], notes: [], config: [], rankings: [], stats: [] };
+let ev = ls('ev'), tab = ls('tab') || 'event', name = ls('name'), mf = ls('mf') || 'ours', sf = ls('sf') || 'todo', tv = ls('tv') || 'list', rks = ls('rks') || 'rank', sks = ls('sks') || 'season', sko = ls('sko') || 'c';
+if (tab === 'teams') tab = 'event'; // Teams and Event are one tab now
+if (!['list', 'rank', 'skills', 'more'].includes(tv)) tv = 'list';
 let mTeam = null, scTeam = '', draft = null, open = {}, dirty = false, loaded = false;
 
 const cfg = () => S.config.find(c => c.id === 'main') || {};
@@ -54,23 +56,23 @@ function stats() {
   const key = ev + '|' + JSON.stringify(qs.map(m => [m.red, m.blue, m.rs, m.bs])) + '|' + (off ? off.t : '');
   if (statsMemo.key === key) return statsMemo.val;
   const nums = [...new Set(qs.flatMap(m => [...m.red, ...m.blue]))], idx = new Map(nums.map((n, i) => [n, i])), n = nums.length;
-  const by = new Map(nums.map(t => [t, { w: 0, l: 0, t: 0, played: 0, opr: 0, dpr: 0, ccwm: 0 }]));
+  const by = new Map(nums.map(t => [t, { w: 0, l: 0, t: 0, played: 0, opr: 0, dpr: 0, ccwm: 0, sum: 0, high: null }]));
   if (n) {
     const AtA = nums.map(() => new Array(n).fill(0)), bo = new Array(n).fill(0), bd = new Array(n).fill(0);
     for (const m of qs) for (const [mine, other, ms, os] of [[m.red, m.blue, m.rs, m.bs], [m.blue, m.red, m.bs, m.rs]]) {
       for (const a of mine) {
         for (const b of mine) AtA[idx.get(a)][idx.get(b)]++;
         bo[idx.get(a)] += ms; bd[idx.get(a)] += os;
-        const r = by.get(a); r.played++; if (ms > os) r.w++; else if (ms < os) r.l++; else r.t++;
+        const r = by.get(a); r.played++; r.sum += ms; if (r.high == null || ms > r.high) r.high = ms; if (ms > os) r.w++; else if (ms < os) r.l++; else r.t++;
       }
     }
     const reg = () => AtA.map((row, i) => row.map((v, j) => v + (i === j ? 1e-3 : 0))); // tiny ridge keeps it solvable early on
     const opr = solve(reg(), bo), dpr = solve(reg(), bd);
-    nums.forEach((t, i) => { const r = by.get(t); r.opr = opr[i]; r.dpr = dpr[i]; r.ccwm = opr[i] - dpr[i]; r.wp = 2 * r.w + r.t });
+    nums.forEach((t, i) => { const r = by.get(t); r.opr = opr[i]; r.dpr = dpr[i]; r.ccwm = opr[i] - dpr[i]; r.wp = 2 * r.w + r.t; r.avg = r.played ? r.sum / r.played : null });
   }
   // rank: official from VEX Events if we have it, otherwise calculated (win points, then OPR)
   const official = offList.length > 0;
-  if (official) for (const o of offList) by.set(o.team, { ...(by.get(o.team) || { opr: null, dpr: null, ccwm: null, played: o.w + o.l + o.t }), rank: o.rank, w: o.w, l: o.l, t: o.t, wp: o.wp, ap: o.ap, sp: o.sp, div: o.div });
+  if (official) for (const o of offList) by.set(o.team, { ...(by.get(o.team) || { opr: null, dpr: null, ccwm: null, played: o.w + o.l + o.t }), rank: o.rank, w: o.w, l: o.l, t: o.t, wp: o.wp, ap: o.ap, sp: o.sp, avg: o.avg, high: o.high, div: o.div });
   else[...by.entries()].sort((a, b) => b[1].wp - a[1].wp || b[1].opr - a[1].opr).forEach(([, r], i) => { r.rank = i + 1 });
   const divs = new Set(offList.map(o => o.div));
   return (statsMemo = { key, val: { by, official, multiDiv: divs.size > 1, n: qs.length } }).val;
@@ -78,6 +80,27 @@ function stats() {
 const f1 = v => v == null || isNaN(v) ? '–' : v.toFixed(1);
 const sgn = v => v == null || isNaN(v) ? '–' : (v > 0 ? '+' : '') + v.toFixed(1);
 const rec = r => r.w + '-' + r.l + '-' + r.t;
+// ---------- season stats from VEX Events (skills, season record, awards) ----------
+// Loaded by the server a few teams at a time and shared with everyone (collection 'stats', one doc per event).
+const stDoc = () => S.stats.find(s => s.eventId === ev);
+const stOf = n => { const d = stDoc(); return d && d.teams && d.teams[n] && !d.teams[n].err ? d.teams[n] : null };
+const has = v => v != null;
+const sumOf = (a, b) => has(a) || has(b) ? (a || 0) + (b || 0) : null;
+// d = driver, p = programming (autonomous), c = the two added together, a = average of c across the events they've done
+function skillOf(n, scope) {
+  const s = stOf(n); if (!s) return null;
+  if (scope === 'event') { const c = s.cur; return c ? { d: c.d, p: c.p, c: sumOf(c.d, c.p), a: null } : null }
+  return { d: s.d, p: s.p, c: sumOf(s.d, s.p), a: sumOf(s.dAvg, s.pAvg) };
+}
+function skillRows(scope, by) {
+  const rows = teams().map(t => ({ team: t.number, ...(skillOf(t.number, scope) || { d: null, p: null, c: null, a: null }) }));
+  rows.sort((a, b) => (b[by] ?? -1) - (a[by] ?? -1) || (b.c ?? -1) - (a.c ?? -1) || a.team.localeCompare(b.team, undefined, { numeric: true }));
+  return rows;
+}
+const fmt = v => has(v) ? (Math.round(v * 10) / 10).toString() : '–';
+const pct = (w, n) => n ? Math.round(100 * w / n) + '%' : '–';
+let statsBusy = false, statsFailAt = 0;
+const statsAge = () => { const d = stDoc(); return d && d.t ? Date.now() - d.t : Infinity };
 const myScouts = t => { const b = scoutBase(t, name); return S.notes.filter(n => n.kind === 'scout' && (n.id === b || n.id.startsWith(b + '_'))) };
 
 // ---------- sync ----------
@@ -108,7 +131,7 @@ async function api(path, body) {
 function applyOp(o) {
   if (o.purge) { // whole event deleted
     S.events = S.events.filter(x => x.id !== o.purge);
-    for (const k of ['teams', 'matches', 'notes']) S[k] = S[k].filter(x => x.eventId !== o.purge);
+    for (const k of ['teams', 'matches', 'notes', 'rankings', 'stats']) S[k] = S[k].filter(x => x.eventId !== o.purge);
     return;
   }
   const arr = S[o.col]; if (!arr) return;
@@ -172,7 +195,30 @@ async function poll() {
   } catch (e) { if (e instanceof NetErr) { online = false; setStatus() } }
   finally { polling = false }
 }
-function syncRE() { const s = skuOf(evObj()); if (!s || syncing || document.hidden || !online) return; syncing = true; api('/import', { sku: s, light: true }).catch(() => {}).finally(() => { syncing = false }) }
+function syncRE() {
+  const s = skuOf(evObj()); if (!s || syncing || document.hidden || !online) return;
+  syncing = true; api('/import', { sku: s, light: true }).catch(() => {}).finally(() => { syncing = false });
+  // season stats are heavy (a few requests per team): load once, then again only when they're 6 hours old
+  if (evObj().reid && statsAge() > 6 * 3600e3 && Date.now() - statsFailAt > 5 * 60e3) refreshStats(false);
+}
+// Season stats come in chunks of a few teams. Progress is written straight into the page (.stmsg) so it doesn't
+// fight with typing, and everyone else's phone only updates once the last chunk is in.
+const statsMsg = t => document.querySelectorAll('.stmsg').forEach(el => { el.textContent = t });
+async function refreshStats(force) {
+  const e = evObj(); if (!e || !e.reid || statsBusy || !online) return;
+  const id = ev; statsBusy = true; statsMsg('Loading season stats…');
+  document.querySelectorAll('[data-act=refstats]').forEach(b => { b.disabled = true });
+  try {
+    for (let off = 0; ;) {
+      const d = await api('/stats', { eventId: id, offset: off, force: !!force });
+      if (d.busy) { statsMsg('Someone else is loading them…'); break }
+      if (d.fresh) { statsMsg('Already up to date.'); break }
+      if (d.done) { statsBusy = false; await pull(); break } // not busy any more, so the re-render shows 'Updated …'
+      statsMsg(`Loading season stats… ${d.next} of ${d.total} teams`); off = d.next;
+    }
+  } catch (err) { statsFailAt = Date.now(); statsMsg('Couldn’t load season stats: ' + String(err.message || err).slice(0, 120)) }
+  finally { statsBusy = false; document.querySelectorAll('[data-act=refstats]').forEach(b => { b.disabled = false }) }
+}
 function schedule() { clearInterval(pollT); clearInterval(impT); if (code) { pollT = setInterval(poll, NOTE_MS); impT = setInterval(syncRE, RE_MS) } }
 
 function setStatus() {
@@ -231,7 +277,6 @@ const SUN = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M1
 function applyTheme() { const t = ls('theme') || 'light'; document.documentElement.dataset.theme = t; $('#theme').innerHTML = t === 'dark' ? SUN : MOON }
 const TABS = [
   ['event', '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>', 'Event'],
-  ['teams', '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.5 0 4 2 4 5"/></svg>', 'Teams'],
   ['matches', '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M12 6v12M8 12h.01M16 12h.01"/></svg>', 'Matches'],
   ['scout', '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg>', 'Scout'],
   ['pick', '<svg viewBox="0 0 24 24"><path d="M7 4h10v4a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v4M8 21h8M10 17h4"/></svg>', 'Picklist']];
@@ -243,7 +288,7 @@ let dragging = false;
 // notes that weren't on screen before fade in, and the team sheet slides up. Nothing moves with reduce-motion on.
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 let lastView = '', modalShown = false, justOpened = null, seenNotes = null, renderedAt = 0, tq = '';
-const viewKey = () => [ev, tab, tab === 'teams' ? tv : '', tab === 'matches' ? mf : '', tab === 'scout' ? sf : '', tab === 'scout' && draft ? draft.id : '', name ? 1 : 0].join('|');
+const viewKey = () => [ev, tab, tab === 'event' ? tv : '', tab === 'matches' ? mf : '', tab === 'scout' ? sf : '', tab === 'scout' && draft ? draft.id : '', name ? 1 : 0].join('|');
 function flipCapture() { const m = new Map(); document.querySelectorAll('#app [data-flip]').forEach(e => m.set(e.dataset.flip, e.getBoundingClientRect().top)); return m }
 function flipPlay(m) {
   if (reduced()) return;
@@ -267,7 +312,7 @@ function render() {
   if (!nav.children.length) nav.innerHTML = TABS.map(t => `<button data-act="tab" data-v="${t[0]}">${t[1]}<span>${t[2]}</span></button>`).join('');
   nav.querySelectorAll('button').forEach(b => { const on = b.dataset.v === tab; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false') });
   const key = viewKey(), same = key === lastView, before = same ? flipCapture() : null, y = scrollY;
-  $('#app').innerHTML = ({ event: vEvent, teams: vTeams, matches: vMatches, scout: vScout, pick: vPick })[tab]();
+  $('#app').innerHTML = ({ event: vEvent, matches: vMatches, scout: vScout, pick: vPick })[tab]();
   scrollTo(0, same ? y : 0);
   if (same) flipPlay(before); else if (lastView && !reduced()) replay($('#app'), 'enter');
   lastView = key; justOpened = null;
@@ -333,46 +378,89 @@ function vAbout() {
   <p class="mut fine">© 2026 Invictus 52111A. All rights reserved. Recon is not affiliated with or endorsed by VEX Robotics or the REC Foundation.</p>`;
 }
 
+// ---------- Event tab: one place for the event, its teams, rankings, skills and notes ----------
+const segBar = (items, cur, act) => `<div class="seg" role="group">${items.map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" aria-pressed="${cur === k}" data-act="${act}" data-v="${k}">${l}</button>`).join('')}</div>`;
+const tlist = () => `<datalist id="tl">${teams().map(t => `<option value="${t.number}">${esc(t.name)}</option>`).join('')}</datalist>`;
+const tiles = a => `<div class="tiles">${a.map(([v, l, sub]) => `<div class="tile"><b>${v}</b><span>${l}</span>${sub ? `<small>${sub}</small>` : ''}</div>`).join('')}</div>`;
+
 function vEvent() {
   const e = evObj(), sku = skuOf(e);
   let h = name ? '' : whoCard('Who are you?', 'Your name goes on your notes and scouting.');
-  const importForm = `<div class="row"><input id="sku" value="${esc(sku || 'RE-V5RC-26-5068')}" placeholder="Event code e.g. RE-V5RC-26-5068"><button class="p" data-act="import">Import</button></div><p class="mut" id="impmsg"></p>`;
-  const manualForm = `<div class="row"><input id="newev" placeholder="Event name"><button data-act="addev">Create</button></div>`;
   const me = name ? `<p class="mut meta">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></p>` : '';
-  if (!e) return h + `<div class="card"><h2>Pick your event</h2>${me}${S.events.length ? evSelect() : ''}<h3>Import from VEX Events</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${importForm}<h3>Or create one by hand</h3>${manualForm}</div>` + settingsCard();
+  if (!e) return h + `<div class="card"><h2>Pick your event</h2>${me}${S.events.length ? evSelect() : ''}<h3>Import from VEX Events</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${importForm('')}<h3>Or create one by hand</h3>${manualForm()}</div>` + settingsCard();
   h += `<div class="card">${evSelect()}
     <p class="mut meta">${sku ? 'From VEX Events · ' + esc(sku) + ' · <button class="link" data-act="reimport">Update now</button>' : 'Created by hand'}${e.link ? ` · <a href="${esc(e.link)}" target="_blank" rel="noopener">Event page ↗</a>` : ''} <span id="impmsg2"></span></p>
-    ${me}
-    <details class="sub" id="d-more" ${det('d-more', false)}><summary>Import or add another event</summary>${importForm}${manualForm}</details>
-    ${sku ? '' : `<details class="sub" id="d-link" ${det('d-link', false)}><summary>Event link</summary><input id="evlink" value="${esc(e.link || '')}" placeholder="Paste the VEX event link here"></details>`}
-    <div class="foot"><button class="d" data-act="delev">Delete event and all its notes</button></div></div>
-  <div class="card"><h2>Event notes</h2>${noteBox('event', '', '', 'Anything about this event…')}</div>`;
-  return h + settingsCard() + tlist();
+    ${me}</div>`;
+  h += segBar([['list', 'Teams'], ['rank', 'Rankings'], ['skills', 'Skills'], ['more', 'More']], tv, 'tview');
+  return h + ({ list: vTeamList, rank: vRank, skills: vSkills, more: vMore })[tv]();
 }
-const tlist = () => `<datalist id="tl">${teams().map(t => `<option value="${t.number}">${esc(t.name)}</option>`).join('')}</datalist>`;
+const importForm = sku => `<div class="row"><input id="sku" value="${esc(sku || 'RE-V5RC-26-5068')}" placeholder="Event code e.g. RE-V5RC-26-5068" aria-label="Event code"><button class="p" data-act="import">Import</button></div><p class="mut" id="impmsg"></p>`;
+const manualForm = () => `<div class="row"><input id="newev" placeholder="Event name" aria-label="Event name"><button data-act="addev">Create</button></div>`;
 
-const segBar = (items, cur, act) => `<div class="seg" role="group">${items.map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" aria-pressed="${cur === k}" data-act="${act}" data-v="${k}">${l}</button>`).join('')}</div>`;
-function vTeams() {
-  if (!evObj()) return empty('Pick an event first.');
-  const seg = segBar([['list', 'All teams'], ['rank', 'Rankings']], tv, 'tview');
-  if (tv === 'rank') return seg + vRank();
-  const ts = teams(), q = tq.toLowerCase();
-  return seg + `<input id="tsearch" type="search" value="${esc(tq)}" placeholder="Search teams…" aria-label="Search teams">
-  <div class="card list" id="tl2">${ts.map(t => { const n = notes('scout', t.number).length + notes('team', t.number).length, hay = (t.number + t.name + t.school).toLowerCase();
-    return `<div class="trow ${t.number === US ? 'us' : ''}" data-act="team" data-t="${t.number}" data-q="${esc(hay)}" ${q && !hay.includes(q) ? 'style="display:none"' : ''}><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div><div class="mut">${esc(t.school)}${n ? ' · ' + n + (n === 1 ? ' note' : ' notes') : ''}</div></div><span class="chev" aria-hidden="true">›</span></div>` }).join('') || empty('No teams yet.')}</div>
-  <details class="card" id="d-addteam" ${det('d-addteam', !ts.length)}><summary><h2>Add a team manually</h2></summary><div class="row"><input id="t_n" placeholder="Number e.g. 52111A"><input id="t_name" placeholder="Team name"><input id="t_s" placeholder="School"><button class="p" data-act="addteam">Add</button></div></details>`;
+// More: everything that isn't a table – alliance requests, event notes, other events, settings.
+function vMore() {
+  const e = evObj(), sku = skuOf(e);
+  return `<div class="card"><h2>Event notes</h2>${noteBox('event', '', '', 'Anything about this event…')}</div>
+  <details class="card" id="d-more" ${det('d-more', false)}><summary><h2>Import or add another event</h2></summary>${importForm(sku)}${manualForm()}</details>
+  ${sku ? '' : `<details class="card" id="d-link" ${det('d-link', false)}><summary><h2>Event link</h2></summary><input id="evlink" value="${esc(e.link || '')}" placeholder="Paste the VEX event link here" aria-label="Event link"></details>`}
+  ${settingsCard()}
+  <div class="foot"><button class="d" data-act="delev">Delete this event and all its notes</button></div>`;
 }
+
+// Teams: search + one row per team with the numbers people ask about most (rank, skills, OPR).
+function vTeamList() {
+  const ts = teams(), q = tq.toLowerCase(), st = stats();
+  return `<input id="tsearch" type="search" value="${esc(tq)}" placeholder="Search teams by number, name or school…" aria-label="Search teams">
+  <div class="card list" id="tl2">${ts.map(t => {
+    const n = notes('scout', t.number).length + notes('team', t.number).length, hay = (t.number + t.name + t.school).toLowerCase();
+    const r = st.by.get(t.number), k = skillOf(t.number, 'season');
+    const bits = [r && r.rank != null ? 'Rank ' + r.rank : '', k && k.c != null ? 'Skills ' + fmt(k.c) + ' (D ' + fmt(k.d) + ' · A ' + fmt(k.p) + ')' : '', r && r.opr != null ? 'OPR ' + f1(r.opr) : ''].filter(Boolean);
+    return `<div class="trow ${t.number === US ? 'us' : ''}" data-act="team" data-t="${t.number}" data-q="${esc(hay)}" ${q && !hay.includes(q) ? 'style="display:none"' : ''}><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div><div class="mut">${esc(t.school)}${n ? ' · ' + n + (n === 1 ? ' note' : ' notes') : ''}</div>${bits.length ? `<div class="mut tstat">${bits.join(' · ')}</div>` : ''}</div><span class="chev" aria-hidden="true">›</span></div>` }).join('') || empty('No teams yet.')}</div>
+  <details class="card" id="d-addteam" ${det('d-addteam', !ts.length)}><summary><h2>Add a team manually</h2></summary><div class="row"><input id="t_n" placeholder="Number e.g. 52111A" aria-label="Team number"><input id="t_name" placeholder="Team name" aria-label="Team name"><input id="t_s" placeholder="School" aria-label="School"><button class="p" data-act="addteam">Add</button></div></details>`;
+}
+
 function vRank() {
   const st = stats(), rows = [...st.by.entries()].map(([team, r]) => ({ ...r, team }));
   if (!rows.length) return '<div class="card"><h2>Rankings</h2><p class="mut">No qualification matches have been scored yet. Rankings and OPR show up here once they are.</p></div>';
-  const key = { rank: (a, b) => (a.div || 0) - (b.div || 0) || a.rank - b.rank, opr: (a, b) => (b.opr ?? -1e9) - (a.opr ?? -1e9), ccwm: (a, b) => (b.ccwm ?? -1e9) - (a.ccwm ?? -1e9) }[rks];
+  const key = { rank: (a, b) => (a.div || 0) - (b.div || 0) || a.rank - b.rank, opr: (a, b) => (b.opr ?? -1e9) - (a.opr ?? -1e9), ccwm: (a, b) => (b.ccwm ?? -1e9) - (a.ccwm ?? -1e9), avg: (a, b) => (b.avg ?? -1e9) - (a.avg ?? -1e9) }[rks] || (() => 0);
   rows.sort(key);
   return `<div class="card"><h2>Rankings</h2><p class="mut">${st.official ? 'Official rankings from VEX Events.' : 'Calculated from qualification scores (win points, then OPR). Official rankings replace these once VEX Events has them.'} OPR uses ${st.n} scored qualification ${st.n === 1 ? 'match' : 'matches'}.</p>
-  ${segBar([['rank', 'Rank'], ['opr', 'OPR'], ['ccwm', 'CCWM']].map(([k, l]) => [k, 'Sort by ' + l]), rks, 'rksort')}
-  <div class="tblwrap"><table class="rk"><thead><tr><th>#</th><th>Team</th><th>W-L-T</th><th>WP</th><th class="wide">AP</th><th class="wide">SP</th><th>OPR</th><th class="wide">DPR</th><th>CCWM</th></tr></thead><tbody>
-  ${rows.map(r => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}"><td>${st.multiDiv ? 'D' + r.div + '·' : ''}${r.rank ?? '–'}</td><td><b>${esc(r.team)}</b></td><td>${rec(r)}</td><td>${r.wp ?? '–'}</td><td class="wide">${r.ap ?? '–'}</td><td class="wide">${r.sp ?? '–'}</td><td>${f1(r.opr)}</td><td class="wide">${f1(r.dpr)}</td><td>${sgn(r.ccwm)}</td></tr>`).join('')}
+  ${segBar([['rank', 'Rank'], ['opr', 'OPR'], ['ccwm', 'CCWM'], ['avg', 'Avg score']].map(([k, l]) => [k, 'Sort: ' + l]), rks, 'rksort')}
+  <div class="tblwrap"><table class="rk"><thead><tr><th>#</th><th>Team</th><th>W-L-T</th><th>WP</th><th class="wide">AP</th><th class="wide">SP</th><th>Avg</th><th class="wide">High</th><th>OPR</th><th class="wide">DPR</th><th>CCWM</th></tr></thead><tbody>
+  ${rows.map(r => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}"><td>${st.multiDiv ? 'D' + r.div + '·' : ''}${r.rank ?? '–'}</td><td><b>${esc(r.team)}</b></td><td>${rec(r)}</td><td>${r.wp ?? '–'}</td><td class="wide">${r.ap ?? '–'}</td><td class="wide">${r.sp ?? '–'}</td><td>${f1(r.avg)}</td><td class="wide">${r.high ?? '–'}</td><td>${f1(r.opr)}</td><td class="wide">${f1(r.dpr)}</td><td>${sgn(r.ccwm)}</td></tr>`).join('')}
   </tbody></table></div>
-  <p class="mut">OPR ≈ points a team adds to its alliance. DPR ≈ points the other alliance scores against it. CCWM = OPR − DPR, its effect on the winning margin. Tap a team for details.</p></div>`;
+  <p class="mut">Avg = average points per match. OPR ≈ points a team adds to its alliance. DPR ≈ points the other alliance scores against it. CCWM = OPR − DPR, its effect on the winning margin. Tap a team for details.</p></div>`;
+}
+
+// Skills: highest / average driver and autonomous (programming) scores for every team, like the VEX app.
+function vSkills() {
+  const e = evObj(), d = stDoc();
+  const upd = e.reid ? `<span class="stmsg mut">${statsBusy ? 'Loading season stats…' : ''}</span>` : '';
+  const refresh = e.reid ? `<button data-act="refstats" ${statsBusy ? 'disabled' : ''}>${d ? 'Refresh' : 'Load season stats'}</button>` : '';
+  if (!e.reid) return '<div class="card"><h2>Skills</h2><p class="mut">Skills scores and season records come from VEX Events, so they need an event imported with its event code (Event tab → More → Import).</p></div>';
+  if (!d) return `<div class="card"><h2>Skills</h2><p class="mut">Season stats (skills scores, season record, awards) aren’t loaded yet. They cover each team’s whole season, not only this event, so they work even when no matches are being played. This takes about a minute.</p><div class="foot">${upd}<span class="grow"></span>${refresh}</div></div>`;
+  const rows = skillRows(sks, sko), got = rows.filter(r => r.c != null);
+  const best = f => got.filter(r => has(r[f])).sort((a, b) => b[f] - a[f])[0];
+  const mean = f => { const v = got.map(r => r[f]).filter(has); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null };
+  const bc = best('c'), bd = best('d'), bp = best('p');
+  const scopeName = sks === 'event' ? 'at this event' : 'this season';
+  const sortName = { c: 'combined', d: 'driver', p: 'autonomous' }[sko];
+  return `<div class="card"><h2>Skills</h2>
+  <p class="mut">Combined = driver skills + autonomous (programming) skills. Each team’s best at any event ${sks === 'event' ? 'is replaced by their scores at this event only' : 'this season'}. Teams with no skills run are listed last.</p>
+  ${segBar([['season', 'Season best'], ['event', 'This event']], sks, 'sksope')}
+  ${got.length ? tiles([
+    [bc ? fmt(bc.c) : '–', 'Highest combined', bc ? bc.team : ''],
+    [bd ? fmt(bd.d) : '–', 'Highest driver', bd ? bd.team : ''],
+    [bp ? fmt(bp.p) : '–', 'Highest auton', bp ? bp.team : ''],
+    [fmt(mean('c')), 'Average combined', got.length + ' of ' + rows.length + ' teams'],
+    [fmt(mean('d')), 'Average driver', ''], [fmt(mean('p')), 'Average auton', ''],
+  ]) : `<p class="mut">${sks === 'event' ? 'Nobody has a skills run at this event yet.' : 'No skills scores found for these teams this season.'}</p>`}
+  ${segBar([['c', 'Sort: Combined'], ['d', 'Sort: Driver'], ['p', 'Sort: Auton']], sko, 'sksort')}
+  <div class="tblwrap"><table class="rk"><thead><tr><th>#</th><th>Team</th><th>Combined</th><th>Driver</th><th>Auton</th>${sks === 'season' ? '<th>Avg</th>' : ''}</tr></thead><tbody>
+  ${rows.map((r, i) => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}"><td>${r[sko] != null ? i + 1 : '–'}</td><td><b>${esc(r.team)}</b></td><td class="${sko === 'c' ? 'hi' : ''}">${fmt(r.c)}</td><td class="${sko === 'd' ? 'hi' : ''}">${fmt(r.d)}</td><td class="${sko === 'p' ? 'hi' : ''}">${fmt(r.p)}</td>${sks === 'season' ? `<td>${fmt(r.a)}</td>` : ''}</tr>`).join('')}
+  </tbody></table></div>
+  <p class="mut">Ranked by ${sortName} score ${scopeName}, among the teams at this event. ${sks === 'season' ? 'Avg = average combined score across the events they’ve done skills at. ' : ''}Tap a team for its full season.</p>
+  <div class="foot"><span class="stmsg mut">${statsBusy ? 'Loading season stats…' : 'Updated ' + new Date(d.t).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span><span class="grow"></span>${refresh}</div></div>`;
 }
 function filt(q) { q = q.toLowerCase(); document.querySelectorAll('#tl2 .trow').forEach(c => c.style.display = c.dataset.q.includes(q) ? '' : 'none') }
 
@@ -397,7 +485,14 @@ function vMatches() {
   return h;
 }
 
-const R = (f, v) => `<div class="rate" role="group">${[1, 2, 3, 4, 5].map(i => `<button data-act="rate" data-f="${f}" data-v="${i}" class="${v === i ? 'on' : ''}" aria-pressed="${v === i}">${i}</button>`).join('')}</div>`;
+// What 1 and 5 mean for each rating, shown under the buttons so a bare "3" always has a meaning.
+const SCALE = { autoCons: ['Rarely works', 'Works every time'], driver: ['Beginner', 'Excellent'], driverCons: ['Many mistakes', 'Very steady'], speed: ['Slow', 'Very fast'], durability: ['Breaks easily', 'Very tough'], scoring: ['Poor', 'Excellent'], scoreCons: ['Hit or miss', 'Every time'], overall: ['Weak', 'Top pick'] };
+const R = (f, v) => `<div class="rate" role="group" aria-labelledby="l_${f}">${[1, 2, 3, 4, 5].map(i => `<button data-act="rate" data-f="${f}" data-v="${i}" class="${v === i ? 'on' : ''}" aria-pressed="${v === i}">${i}</button>`).join('')}</div>${SCALE[f] ? `<div class="scale"><span>1 = ${SCALE[f][0]}</span><span>5 = ${SCALE[f][1]}</span></div>` : ''}`;
+// A labelled field: the label stays visible after something is typed, with an optional hint under it.
+const fld = (id, label, body, hint) => `<div class="ff"><label id="l_${id}" for="${id}">${label}</label>${hint ? `<div class="mut hint">${hint}</div>` : ''}${body}</div>`;
+const fldR = (f, label, v, hint) => `<div class="ff"><div class="lbl" id="l_${f}">${label}</div>${hint ? `<div class="mut hint">${hint}</div>` : ''}${R(f, v)}</div>`;
+const sect = (title, sub, body) => `<div class="card sect"><div class="sech"><h2>${title}</h2><p class="mut">${sub}</p></div>${body}</div>`;
+const opts = (list, cur, blank) => `<option value="">${blank}</option>` + list.map(o => `<option ${cur === o ? 'selected' : ''}>${o}</option>`).join('');
 function vScout() {
   if (!evObj()) return empty('Pick an event first.');
   if (!name) return whoCard('Who’s scouting?', 'You can scout each team once overall, plus once per match you watch, and come back to edit.');
@@ -405,19 +500,32 @@ function vScout() {
   if (scTeam && draft) {
     const d = draft, tms = ms.filter(m => m.red.includes(scTeam) || m.blue.includes(scTeam));
     const rel = m => { const s = side(m, scTeam); return s === 'ally' ? ' · with us' : s === 'opp' ? ' · against us' : '' };
-    const F = (label, f) => `<div class="fld"><span>${label}</span>${R(f, d[f])}</div>`;
-    const pick = (f, ph, opts) => `<select data-f="${f}" aria-label="${ph}"><option value="">${ph}</option>${opts.map(o => `<option ${d[f] === o ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
     return `<button class="link back" data-act="donescout">‹ All teams</button>
-    <div class="card scoutform"><h2><span class="num">${scTeam}</span> ${esc(tName(scTeam))}</h2>
-    <select id="scm" aria-label="What are you scouting?"><option value="">Overall / pit scouting</option>${tms.map(m => `<option value="${esc(m.id)}" ${d.match === m.id ? 'selected' : ''}>Match ${esc(m.label)}${rel(m)}${scored(m) ? ' · played' : ''}</option>`).join('')}</select>
-    <h3>Autonomous</h3><input data-f="autoPts" value="${esc(d.autoPts)}" placeholder="Auto points they score">${F('Consistency', 'autoCons')}<textarea data-f="autoNotes" rows="2" placeholder="What does their auto do?">${esc(d.autoNotes)}</textarea>
-    <h3>Driver</h3>${F('Skill', 'driver')}${F('Consistency', 'driverCons')}<textarea data-f="driveNotes" rows="2" placeholder="How they drive, strategy, defence, mistakes…">${esc(d.driveNotes)}</textarea>
-    <h3>Robot</h3><input data-f="robotType" value="${esc(d.robotType)}" placeholder="Type & design (drivetrain, intake, scorer…)">${F('Speed', 'speed')}${F('Durability', 'durability')}
-    <h3>Scoring</h3>${F('Ability', 'scoring')}${F('Consistency', 'scoreCons')}${pick('reliable', 'Scores reliably?', ['Yes, reliable', 'Sometimes', 'No, bad at scoring'])}
-    <h3>Toggle</h3>${pick('toggle', 'How well do they hold a toggle?', ['Very well', 'Well', 'Decent', 'Not well', 'Not at all'])}${F('Mechanism', 'toggleQ')}
-    <h3>Overall</h3>${F('Rating', 'overall')}${pick('good', 'Are they good?', ['Yes', 'Decent', 'No'])}
-    <textarea data-f="comments" rows="2" placeholder="Other comments, weaknesses…">${esc(d.comments)}</textarea>
-    <div class="foot"><span class="mut grow">✔ Autosaves${online ? '' : ' (kept on this phone until you’re back online)'}</span><button class="d" data-act="resetdraft">Reset</button><button class="p" data-act="donescout">Done</button></div></div>`;
+    <div class="card"><h2><span class="num">${scTeam}</span> ${esc(tName(scTeam))}</h2>
+    ${fld('scm', 'What are you scouting?', `<select id="scm"><option value="">Overall / pit scouting (not one match)</option>${tms.map(m => `<option value="${esc(m.id)}" ${d.match === m.id ? 'selected' : ''}>Match ${esc(m.label)}${rel(m)}${scored(m) ? ' · played' : ''}</option>`).join('')}</select>`, 'Overall = your general read of the team. Pick a match to record what you saw in that one match.')}
+    <p class="mut hint">Ratings go from 1 (weakest) to 5 (best); the words under each row say what that means. Tap the same number again to clear it.</p></div>
+    ${sect('Autonomous', 'What the robot does on its own, before the drivers take over.',
+      fld('f_autoPts', 'Auto points scored', `<input id="f_autoPts" data-f="autoPts" inputmode="decimal" value="${esc(d.autoPts)}" placeholder="e.g. 12">`, 'Roughly how many points their autonomous scores in a match.') +
+      fldR('autoCons', 'Auto consistency', d.autoCons, 'Does it work every match?') +
+      fld('f_autoNotes', 'What does their auto do?', `<textarea id="f_autoNotes" data-f="autoNotes" placeholder="e.g. Scores 2 preloads then drives to the wall">${esc(d.autoNotes)}</textarea>`))}
+    ${sect('Driver', 'How well the person driving plays the match.',
+      fldR('driver', 'Driver skill', d.driver) + fldR('driverCons', 'Driver consistency', d.driverCons, 'Steady every match, or up and down?') +
+      fld('f_driveNotes', 'Driving notes', `<textarea id="f_driveNotes" data-f="driveNotes" placeholder="e.g. Plays good defence, but slow to get back to the scoring zone">${esc(d.driveNotes)}</textarea>`, 'How they drive, their strategy, mistakes, how well they play defence.'))}
+    ${sect('Robot', 'The build itself.',
+      fld('f_robotType', 'Robot type & design', `<input id="f_robotType" data-f="robotType" value="${esc(d.robotType)}" placeholder="e.g. 6-motor tank drive, roller intake, arm scorer">`, 'Drivetrain, intake and scoring mechanism.') +
+      fldR('speed', 'Speed', d.speed) + fldR('durability', 'Durability', d.durability, 'Will it survive a hard match?'))}
+    ${sect('Scoring', 'How well they score during a match.',
+      fldR('scoring', 'Scoring ability', d.scoring) +
+      fld('f_reliable', 'Can they score reliably?', `<select id="f_reliable" data-f="reliable">${opts(['Yes, reliable', 'Sometimes', 'No, bad at scoring'], d.reliable, 'Not sure yet')}</select>`) +
+      fldR('scoreCons', 'Scoring consistency', d.scoreCons, 'Do they score about the same every match?'))}
+    ${sect('Toggle', 'Whether they can hold a toggle, and how they do it.',
+      fld('f_toggle', 'How well can they hold a toggle?', `<select id="f_toggle" data-f="toggle">${opts(['Very well', 'Well', 'Decent', 'Not well', 'Not at all'], d.toggle, 'Not sure yet')}</select>`) +
+      fld('f_toggleMech', 'Toggle mechanism', `<textarea id="f_toggleMech" data-f="toggleMech" placeholder="e.g. Pneumatic hook on the arm that clamps the top bar">${esc(d.toggleMech)}</textarea>`, 'Describe what they use to do the toggle (not a score).'))}
+    ${sect('Overall', 'Your final read on this team.',
+      fldR('overall', 'Overall rating', d.overall) +
+      fld('f_good', 'Are they a good team?', `<select id="f_good" data-f="good">${opts(['Yes', 'Decent', 'No'], d.good, 'Not sure yet')}</select>`) +
+      fld('f_comments', 'Other comments & weaknesses', `<textarea id="f_comments" data-f="comments" placeholder="Anything else we should know…">${esc(d.comments)}</textarea>`))}
+    <div class="card"><div class="foot"><span class="mut grow">✔ Autosaves as you go${online ? '' : ' (kept on this phone until you’re back online)'}.</span><button class="d" data-act="resetdraft">Reset</button><button class="p" data-act="donescout">Done</button></div></div>`;
   }
   const rel = n => { const a = [], o = []; ms.forEach(x => { const s = side(x, n); if (n === US || !s) return; (s === 'ally' ? a : o).push(x.label.replace(/^Mock /, '')) }); return { a, o } };
   const all = teams().filter(t => t.number !== US), mine = t => myScouts(t.number).length, left = all.filter(t => !mine(t)), show = sf === 'todo' ? left : all;
@@ -438,26 +546,51 @@ function saveDraft(ms = 600) { clearTimeout(saveT); saveT = setTimeout(flushDraf
 // Write the draft now if an autosave is pending (called before leaving the form so the last edits aren't lost).
 // It's sent quietly: the form already shows what was typed, so there's nothing to re-render.
 function flushDraft() { if (saveT === null) return; clearTimeout(saveT); saveT = null; if (draft) { draft.by = name; send({ col: 'notes', id: draft.id, data: { ...draft }, mode: 'set' }, true) } }
-const sum = n => `<div class="note"><b>${n.matchLabel ? 'Match ' + esc(n.matchLabel) : 'Overall'}</b> <small>${esc(n.by || '')} · ${when(n.ts)}</small>
- Auto: ${esc(n.autoPts || '-')} pts, consistency ${n.autoCons || '-'}/5 ${esc(n.autoNotes || '')}
- Driver ${n.driver || '-'}/5 (consistency ${n.driverCons || '-'}/5) ${esc(n.driveNotes || '')}
- Speed ${n.speed || '-'}/5 · Durability ${n.durability || '-'}/5
- Robot: ${esc(n.robotType || '-')}
- Scoring ${n.scoring || '-'}/5 (consistency ${n.scoreCons || '-'}/5) · ${esc(n.reliable || '-')}
- Toggle: ${esc(n.toggle || '-')} (mech ${n.toggleQ || '-'}/5)
- Overall ${n.overall || '-'}/5 · ${esc(n.good || '-')}
- ${esc(n.comments || '')}</div>`;
+// One saved scouting entry, as teammates read it: grouped, every value labelled, empty fields left out.
+const sum = n => {
+  const r5 = v => v ? v + ' / 5' : '', pts = v => v ? esc(v) + ' pts' : '';
+  const kv = (l, v) => v ? `<div class="kv"><span>${l}</span><b>${v}</b></div>` : '';
+  const tx = (l, v) => v ? `<div class="kv txt"><span>${l}</span><div>${esc(v)}</div></div>` : '';
+  const grp = (t, ...rows) => { const h = rows.join(''); return h ? `<div class="sg"><h4>${t}</h4>${h}</div>` : '' };
+  return `<div class="note entry"><div class="ehead"><b>${n.matchLabel ? 'Match ' + esc(n.matchLabel) : 'Overall scouting'}</b><span class="mut">${esc(n.by || '')} · ${when(n.ts)}</span></div>` +
+    grp('Autonomous', kv('Auto points', pts(n.autoPts)), kv('Auto consistency', r5(n.autoCons)), tx('What their auto does', n.autoNotes)) +
+    grp('Driver', kv('Driver skill', r5(n.driver)), kv('Driver consistency', r5(n.driverCons)), tx('Driving notes', n.driveNotes)) +
+    grp('Robot', tx('Type & design', n.robotType), kv('Speed', r5(n.speed)), kv('Durability', r5(n.durability))) +
+    grp('Scoring', kv('Scoring ability', r5(n.scoring)), kv('Scores reliably?', esc(n.reliable || '')), kv('Scoring consistency', r5(n.scoreCons))) +
+    grp('Toggle', kv('Holds a toggle', esc(n.toggle || '')), tx('Toggle mechanism', n.toggleMech), !n.toggleMech && n.toggleQ ? kv('Mechanism rating (old form)', r5(n.toggleQ)) : '') +
+    grp('Overall', kv('Overall rating', r5(n.overall)), kv('Good team?', esc(n.good || '')), tx('Comments', n.comments)) + `</div>`;
+};
+
+// Everything the VEX app shows for a team, for the whole season: skills, record, event history, awards.
+function seasonCard(num) {
+  const e = evObj(), d = stDoc(), s = d && d.teams && d.teams[num];
+  if (!e || !e.reid) return `<div class="card"><h2>Season stats</h2><p class="mut">Skills scores, season record and awards come from VEX Events, so they need an event imported with its event code.</p></div>`;
+  if (!d) return `<div class="card"><h2>Season stats</h2><p class="mut">Not loaded yet. Open Event → Skills and tap <b>Load season stats</b>.</p></div>`;
+  if (!s || s.err) return `<div class="card"><h2>Season stats</h2><p class="mut">${s ? 'VEX Events didn’t give us this team’s season. Try Refresh on the Skills page.' : 'No season data for this team (added by hand, or new this event).'}</p></div>`;
+  const all = skillRows('season', 'c'), idx = all.findIndex(r => r.team === num), c = sumOf(s.d, s.p), got = all.filter(r => r.c != null).length;
+  const hist = (s.ev || []).slice().reverse(), sh = (s.sh || []).slice().reverse();
+  const here = id => id === e.reid ? ' <span class="pill">this event</span>' : '';
+  return `<div class="card"><h2>Season stats</h2><p class="mut">${esc([s.loc, s.gr, s.rb ? 'Robot: ' + s.rb : ''].filter(Boolean).join(' · '))}${s.part ? ' · some data is missing, Refresh on the Skills page to retry' : ''}</p>
+  <h3>Skills</h3>
+  ${tiles([[fmt(c), 'Combined', c != null && idx >= 0 ? 'Rank ' + (idx + 1) + ' of ' + got + ' here' : ''], [fmt(s.d), 'Best driver', s.dAvg != null ? 'avg ' + fmt(s.dAvg) : ''], [fmt(s.p), 'Best auton', s.pAvg != null ? 'avg ' + fmt(s.pAvg) : '']])}
+  ${sh.length ? `<div class="tblwrap"><table class="rk sm"><thead><tr><th>Event</th><th>Driver</th><th>Auton</th><th>Total</th></tr></thead><tbody>${sh.map(x => `<tr><td>${esc(x.n)}${here(x.id)}</td><td>${fmt(x.d)}${x.da ? ` <small>(${x.da} tries)</small>` : ''}</td><td>${fmt(x.p)}${x.pa ? ` <small>(${x.pa} tries)</small>` : ''}</td><td><b>${fmt(sumOf(x.d, x.p))}</b></td></tr>`).join('')}</tbody></table></div>` : '<p class="mut">No skills runs this season.</p>'}
+  <h3>Season record</h3>
+  ${s.played ? tiles([[s.w + '-' + s.l + '-' + s.t, 'W-L-T', pct(s.w, s.played) + ' wins'], [fmt(s.avg), 'Avg score', 'per match'], [fmt(s.hi), 'High score', ''], [(s.ev || []).length, 'Events', s.played + ' matches']]) : '<p class="mut">No qualification matches played this season.</p>'}
+  ${hist.length ? `<div class="tblwrap"><table class="rk sm"><thead><tr><th>Event</th><th>Rank</th><th>W-L-T</th><th>Avg</th></tr></thead><tbody>${hist.map(x => `<tr><td>${esc(x.n)}${here(x.id)}</td><td>${x.rank ?? '–'}</td><td>${x.w}-${x.l}-${x.t}</td><td>${fmt(x.avg)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+  <h3>Awards</h3>${(s.aw || []).map(a => `<div class="award"><b>${esc(a[0])}</b>${a[1] ? `<div class="mut">${esc(a[1])}</div>` : ''}</div>`).join('') || '<p class="mut">No awards this season.</p>'}</div>`;
+}
 
 function vTeam(num) {
   const head = (title, sub, act) => `<div class="sheethead"><div class="grow"><h2>${title}</h2>${sub ? `<div class="mut">${sub}</div>` : ''}</div>${act || ''}<button data-act="close">Close</button></div>`;
-  if (num === US) return head(`<span class="num">${esc(num)}</span> ${esc(tName(num) || 'Us')}`) + `<div class="card">That’s us. Scouting and team notes are turned off for our own team.</div>`;
+  if (num === US) return head(`<span class="num">${esc(num)}</span> ${esc(tName(num) || 'Us')}`) + `<div class="card">That’s us. Scouting and team notes are turned off for our own team.</div>` + seasonCard(num);
   const t = teams().find(x => x.number === num) || { number: num, name: '', school: '' };
   const ms = matches().filter(m => m.red.includes(num) || m.blue.includes(num));
   const sc = notes('scout', num);
   const avg = f => { const v = sc.map(s => parseFloat(s[f])).filter(x => x > 0); return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-' };
   return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) + `<button class="p wide" data-act="scoutfrom" data-t="${esc(num)}">Scout this team</button>
   ${(() => { const st = stats(), r = st.by.get(num); return r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '' })()}
-  <div class="card"><b>Averages</b> (${sc.length} ${sc.length === 1 ? 'entry' : 'entries'})<div class="mut">Auto ${avg('autoPts')} pts · Driver ${avg('driver')} · Speed ${avg('speed')} · Scoring ${avg('scoring')} · Durability ${avg('durability')} · Overall ${avg('overall')}</div></div>
+  ${seasonCard(num)}
+  <div class="card"><h2>Scouting averages</h2><p class="mut">From ${sc.length} ${sc.length === 1 ? 'entry' : 'entries'}. Ratings are out of 5.</p>${sc.length ? tiles([[avg('autoPts'), 'Auto points'], [avg('driver'), 'Driver skill'], [avg('speed'), 'Speed'], [avg('scoring'), 'Scoring'], [avg('durability'), 'Durability'], [avg('overall'), 'Overall']]) : ''}</div>
   <div class="card"><h2>Matches</h2>${ms.map(m => `<span class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}">${esc(m.label)}</span>`).join('') || '<span class="mut">None</span>'}</div>
   <div class="card"><h2>Scouting entries</h2>${sc.map(s => sum(s)).join('') || '<span class="mut">None yet</span>'}${notes('team', num).length ? `<h3>Older quick notes</h3>${notes('team', num).map(noteRow).join('')}` : ''}<div class="foot">${sc.length ? `<button class="d" data-act="clearscout" data-t="${num}">Clear all scouting entries</button>` : ''}${notes('team', num).length ? `<button class="d" data-act="clearnotes" data-t="${num}">Clear older quick notes</button>` : ''}</div></div>
   <div class="card"><h2>Alliance requests</h2>${notes('req', num).map(n => `<div class="note">${esc(n.text)}</div>`).join('') || '<span class="mut">None</span>'}</div>
@@ -546,6 +679,9 @@ document.addEventListener('click', e => {
   else if (a === 'mfilter') { mf = b.dataset.v; ls('mf', mf); render() }
   else if (a === 'tview') { tv = b.dataset.v; ls('tv', tv); render() }
   else if (a === 'rksort') { rks = b.dataset.v; ls('rks', rks); render() }
+  else if (a === 'sksope') { sks = b.dataset.v; ls('sks', sks); render() }
+  else if (a === 'sksort') { sko = b.dataset.v; ls('sko', sko); render() }
+  else if (a === 'refstats') refreshStats(true);
   else if (a === 'addnote') {
     const ta = $('#' + b.dataset.in), t = ta.value.trim();
     if (t && !(b.dataset.kind === 'team' && b.dataset.ref === US)) put('notes', uid(), { eventId: ev, kind: b.dataset.kind, ref: b.dataset.ref, sec: b.dataset.sec, text: t, by: me, ts: Date.now() });
