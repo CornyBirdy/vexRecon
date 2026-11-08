@@ -1,8 +1,17 @@
-# vexRecon (Invictus 52111A scouting)
+# Recon (made by Invictus 52111A)
 
-Phone-first VEX scouting app on Netlify: static client in `public/` (`index.html`, `app.js`, `app.css`,
-`tokens.css`, `sw.js`) and one serverless function, `netlify/functions/api.mjs`, that stores data in Netlify Blobs
-and holds the RobotEvents key. Preview locally with `netlify dev` (see README).
+Recon is a proprietary, multi-team VEX scouting app on Netlify: static client in `public/` (`index.html`, `app.js`,
+`app.css`, `tokens.css`, `sw.js`) and one serverless function, `netlify/functions/api.mjs`. Any team signs up with its
+VEX team number and shares a generated team code; each team's data lives in its own Netlify Blobs store. The
+function also holds the RobotEvents key. Preview locally with `netlify dev` (see README).
+
+## Product rules
+- The product is called **Recon**. Invictus 52111A must always stay credited (welcome screen, About, README,
+  LICENSE). Don't remove the credit.
+- Licence is proprietary (`LICENSE`, `"license": "UNLICENSED"`). Don't add open-source code or assets whose licence
+  would conflict with that.
+- Team data must stay isolated per team. Team codes are only ever stored hashed. The original Invictus install
+  (store `scout`, env `TEAM_CODE`) is adopted as team 52111A on first sign-in; keep that path working.
 
 ## Branches
 - **All work goes on `beta`.** Base your work on the latest `origin/beta` and push to `beta`, even if this session

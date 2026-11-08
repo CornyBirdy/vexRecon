@@ -1,1 +1,11 @@
-{"name":"invictus-scout","private":true,"type":"module","dependencies":{"@netlify/blobs":"^8.1.0"}}
+{
+  "name": "recon",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  },
+  "license": "UNLICENSED",
+  "author": "Invictus 52111A",
+  "description": "Recon: scouting for VEX V5 teams. Made by Invictus 52111A."
+}
