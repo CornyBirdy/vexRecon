@@ -46,8 +46,12 @@ works except the VEX Events import – add an event, teams and matches by hand i
   show or copy the code so you can give it to a teammate.
 - **Motion.** Views fade in, the team page slides up (tap outside it to close), match notes slide open, new notes fade in
   and picklist / ranking rows glide when they move. All of it turns off with the phone's "reduce motion" setting.
-- **Scouting.** Each scout has one overall entry per team, and can add one per match they watched
-  ("What are you scouting?" at the top of the form). The team page averages all of them.
+- **Scouting.** The Scout tab is the one place to write scouting (the team page has a **Scout this team** button that opens it).
+  Each scout has one overall entry per team, and can add one per match they watched (the dropdown at the top of the form).
+  The team page is a read-only profile that averages all entries. The Scout list shows **To scout** by default so you can
+  see what's left; switch to **All teams** to edit an entry.
+- **Alliance requests** live on the Picklist tab, with an **Add to picklist** button on each one.
+- **App icon.** The favicon follows the browser's light/dark setting. The home-screen icon is a fixed dark tile (installed apps can't switch).
 
 ## Changes from the first version
 - Matches: score no longer wraps onto two lines; W/L badge; **Our matches / All matches** switch; non-our matches get a notes box;
