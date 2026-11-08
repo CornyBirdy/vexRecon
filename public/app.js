@@ -17,7 +17,7 @@ const APP = { name: 'Recon', version: '1.0.0' };
 let US = '', NAMES = [];
 const COLS = ['events', 'teams', 'matches', 'notes', 'config', 'rankings'];
 let S = { events: [], teams: [], matches: [], notes: [], config: [], rankings: [] };
-let ev = ls('ev'), tab = ls('tab') || 'event', name = ls('name'), mf = ls('mf') || 'ours', tv = ls('tv') || 'list', rks = ls('rks') || 'rank';
+let ev = ls('ev'), tab = ls('tab') || 'event', name = ls('name'), mf = ls('mf') || 'ours', sf = ls('sf') || 'todo', tv = ls('tv') || 'list', rks = ls('rks') || 'rank';
 let mTeam = null, scTeam = '', draft = null, open = {}, dirty = false, loaded = false;
 
 const cfg = () => S.config.find(c => c.id === 'main') || {};
@@ -243,7 +243,7 @@ let dragging = false;
 // notes that weren't on screen before fade in, and the team sheet slides up. Nothing moves with reduce-motion on.
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 let lastView = '', modalShown = false, justOpened = null, seenNotes = null, renderedAt = 0, tq = '';
-const viewKey = () => [ev, tab, tab === 'teams' ? tv : '', tab === 'matches' ? mf : '', tab === 'scout' && draft ? draft.id : '', name ? 1 : 0].join('|');
+const viewKey = () => [ev, tab, tab === 'teams' ? tv : '', tab === 'matches' ? mf : '', tab === 'scout' ? sf : '', tab === 'scout' && draft ? draft.id : '', name ? 1 : 0].join('|');
 function flipCapture() { const m = new Map(); document.querySelectorAll('#app [data-flip]').forEach(e => m.set(e.dataset.flip, e.getBoundingClientRect().top)); return m }
 function flipPlay(m) {
   if (reduced()) return;
@@ -346,9 +346,6 @@ function vEvent() {
     <details class="sub" id="d-more" ${det('d-more', false)}><summary>Import or add another event</summary>${importForm}${manualForm}</details>
     ${sku ? '' : `<details class="sub" id="d-link" ${det('d-link', false)}><summary>Event link</summary><input id="evlink" value="${esc(e.link || '')}" placeholder="Paste the VEX event link here"></details>`}
     <div class="foot"><button class="d" data-act="delev">Delete event and all its notes</button></div></div>
-  <div class="card"><h2>Alliance requests</h2><p class="mut">Teams that asked to ally with us, and what they say they’re good at.</p>
-    <div class="row"><input id="rq_t" list="tl" placeholder="Team #" class="narrow"><input id="rq_x" placeholder="Their strengths"><button data-act="addreq">Add</button></div>
-    ${notes('req').map(n => `<div class="note ${fresh(n)}"><div class="ntext"><b>${esc(n.ref)}</b> ${esc(tName(n.ref))} — ${esc(n.text)}</div><small>${esc(n.by || '')}<button class="d" data-act="delnote" data-id="${n.id}">Delete</button></small></div>`).join('')}</div>
   <div class="card"><h2>Event notes</h2>${noteBox('event', '', '', 'Anything about this event…')}</div>`;
   return h + settingsCard() + tlist();
 }
@@ -408,30 +405,28 @@ function vScout() {
   if (scTeam && draft) {
     const d = draft, tms = ms.filter(m => m.red.includes(scTeam) || m.blue.includes(scTeam));
     const rel = m => { const s = side(m, scTeam); return s === 'ally' ? ' · with us' : s === 'opp' ? ' · against us' : '' };
-    return `<button class="link back" data-act="donescout">‹ Back to teams</button>
-    <div class="card"><h2><span class="num">${scTeam}</span> ${esc(tName(scTeam))}</h2>
-    <h3>What are you scouting?</h3><select id="scm"><option value="">Overall / pit scouting (not one match)</option>${tms.map(m => `<option value="${esc(m.id)}" ${d.match === m.id ? 'selected' : ''}>Match ${esc(m.label)}${rel(m)}${scored(m) ? ' · played' : ''}</option>`).join('')}</select>
-    <p class="mut hint">Remember to note: autonomous points & consistency · driver skill & consistency · robot type & design · speed · scoring · consistency · durability · overall.</p>
-    <h3>Autonomous</h3><input data-f="autoPts" value="${esc(d.autoPts)}" placeholder="Auto points they score"><div class="mut">Auto consistency</div>${R('autoCons', d.autoCons)}<textarea data-f="autoNotes" placeholder="What does their auto do?">${esc(d.autoNotes)}</textarea>
-    <h3>Driver</h3><div class="mut">Driver skill</div>${R('driver', d.driver)}<div class="mut">Driver consistency</div>${R('driverCons', d.driverCons)}<textarea data-f="driveNotes" placeholder="Driving notes (how they drive, strategy, mistakes, how well they play defence, etc.)">${esc(d.driveNotes)}</textarea>
-    <h3>Robot</h3><input data-f="robotType" value="${esc(d.robotType)}" placeholder="Robot type & design (drivetrain, intake, scorer…)">
-    <div class="mut">Speed</div>${R('speed', d.speed)}<div class="mut">Durability</div>${R('durability', d.durability)}
-    <h3>Scoring</h3><div class="mut">Scoring ability</div>${R('scoring', d.scoring)}<div class="mut">Can they score reliably?</div>
-    <select data-f="reliable"><option value="">—</option>${['Yes, reliable', 'Sometimes', 'No, bad at scoring'].map(o => `<option ${d.reliable === o ? 'selected' : ''}>${o}</option>`).join('')}</select>
-    <div class="mut">Scoring consistency</div>${R('scoreCons', d.scoreCons)}
-    <h3>Toggle</h3><div class="mut">How well can they hold a toggle?</div>
-    <select data-f="toggle"><option value="">—</option>${['Very well', 'Well', 'Decent', 'Not well', 'Not at all'].map(o => `<option ${d.toggle === o ? 'selected' : ''}>${o}</option>`).join('')}</select>
-    <div class="mut">How good is their toggle mechanism?</div>${R('toggleQ', d.toggleQ)}
-    <h3>Overall</h3><div class="mut">Overall rating</div>${R('overall', d.overall)}
-    <select data-f="good"><option value="">Are they good?</option>${['Yes', 'Decent', 'No'].map(o => `<option ${d.good === o ? 'selected' : ''}>${o}</option>`).join('')}</select>
-    <textarea data-f="comments" placeholder="Other comments, weaknesses…">${esc(d.comments)}</textarea>
-    <div class="foot"><span class="mut grow">✔ Autosaves as you go${online ? '' : ' (kept on this phone until you’re back online)'}.</span><button class="d" data-act="resetdraft">Reset</button><button class="p" data-act="donescout">Done</button></div></div>`;
+    const F = (label, f) => `<div class="fld"><span>${label}</span>${R(f, d[f])}</div>`;
+    const pick = (f, ph, opts) => `<select data-f="${f}" aria-label="${ph}"><option value="">${ph}</option>${opts.map(o => `<option ${d[f] === o ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+    return `<button class="link back" data-act="donescout">‹ All teams</button>
+    <div class="card scoutform"><h2><span class="num">${scTeam}</span> ${esc(tName(scTeam))}</h2>
+    <select id="scm" aria-label="What are you scouting?"><option value="">Overall / pit scouting</option>${tms.map(m => `<option value="${esc(m.id)}" ${d.match === m.id ? 'selected' : ''}>Match ${esc(m.label)}${rel(m)}${scored(m) ? ' · played' : ''}</option>`).join('')}</select>
+    <h3>Autonomous</h3><input data-f="autoPts" value="${esc(d.autoPts)}" placeholder="Auto points they score">${F('Consistency', 'autoCons')}<textarea data-f="autoNotes" rows="2" placeholder="What does their auto do?">${esc(d.autoNotes)}</textarea>
+    <h3>Driver</h3>${F('Skill', 'driver')}${F('Consistency', 'driverCons')}<textarea data-f="driveNotes" rows="2" placeholder="How they drive, strategy, defence, mistakes…">${esc(d.driveNotes)}</textarea>
+    <h3>Robot</h3><input data-f="robotType" value="${esc(d.robotType)}" placeholder="Type & design (drivetrain, intake, scorer…)">${F('Speed', 'speed')}${F('Durability', 'durability')}
+    <h3>Scoring</h3>${F('Ability', 'scoring')}${F('Consistency', 'scoreCons')}${pick('reliable', 'Scores reliably?', ['Yes, reliable', 'Sometimes', 'No, bad at scoring'])}
+    <h3>Toggle</h3>${pick('toggle', 'How well do they hold a toggle?', ['Very well', 'Well', 'Decent', 'Not well', 'Not at all'])}${F('Mechanism', 'toggleQ')}
+    <h3>Overall</h3>${F('Rating', 'overall')}${pick('good', 'Are they good?', ['Yes', 'Decent', 'No'])}
+    <textarea data-f="comments" rows="2" placeholder="Other comments, weaknesses…">${esc(d.comments)}</textarea>
+    <div class="foot"><span class="mut grow">✔ Autosaves${online ? '' : ' (kept on this phone until you’re back online)'}</span><button class="d" data-act="resetdraft">Reset</button><button class="p" data-act="donescout">Done</button></div></div>`;
   }
   const rel = n => { const a = [], o = []; ms.forEach(x => { const s = side(x, n); if (n === US || !s) return; (s === 'ally' ? a : o).push(x.label.replace(/^Mock /, '')) }); return { a, o } };
-  return `<div class="card"><h2>Pick a team to scout</h2><p class="mut">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></p><p class="mut">Green = we play with them · Red = we play against them · Half and half = both</p>${teams().filter(t => t.number !== US).map(t => {
-    const r = rel(t.number), c = r.a.length && !r.o.length ? 'gn' : r.o.length && !r.a.length ? 'rd' : r.a.length && r.o.length ? 'both' : '', mine = myScouts(t.number).length;
-    return `<div class="trow ${scTeam === t.number ? 'sel' : ''}" data-act="startscout" data-t="${t.number}"><span class="chip ${c}">${t.number}</span><div style="flex:1"><div>${esc(t.name)}</div>${mine ? `<div class="lab" style="color:var(--accent-text)">✓ You’ve scouted this${mine > 1 ? ' (' + mine + ' entries)' : ''}</div>` : ''}${r.a.length ? `<div class="lab g">With us: ${r.a.join(', ')}</div>` : ''}${r.o.length ? `<div class="lab r">Against us: ${r.o.join(', ')}</div>` : ''}${!r.a.length && !r.o.length ? '<span class="mut">Not in a match with us</span>' : ''}</div><span class="chev" aria-hidden="true">›</span></div>`
-  }).join('') || '<span class="mut">Add teams first.</span>'}</div>`;
+  const all = teams().filter(t => t.number !== US), mine = t => myScouts(t.number).length, left = all.filter(t => !mine(t)), show = sf === 'todo' ? left : all;
+  return `<div class="scouthead"><span class="mut">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></span><span class="mut">${all.length - left.length} of ${all.length} done</span></div>
+  ${segBar([['todo', 'To scout (' + left.length + ')'], ['all', 'All teams (' + all.length + ')']], sf, 'sfilter')}
+  <div class="card list">${show.map(t => {
+    const r = rel(t.number), n = mine(t);
+    return `<div class="trow" data-act="startscout" data-t="${t.number}"><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div>${r.a.length || r.o.length ? `<div class="rels">${r.a.length ? `<span class="rel g">With us ${r.a.join(' ')}</span>` : ''}${r.o.length ? `<span class="rel r">Against ${r.o.join(' ')}</span>` : ''}</div>` : ''}</div>${n ? `<span class="tick" title="You’ve scouted this${n > 1 ? ' (' + n + ' entries)' : ''}">✓${n > 1 ? ' ' + n : ''}</span>` : ''}<span class="chev" aria-hidden="true">›</span></div>`
+  }).join('') || empty(all.length ? 'You’ve scouted every team. Switch to All teams to edit an entry.' : 'Add teams first.')}</div>`;
 }
 function newDraft(t, matchId) {
   const m = matchId && S.matches.find(x => x.id === matchId);
@@ -454,18 +449,17 @@ const sum = n => `<div class="note"><b>${n.matchLabel ? 'Match ' + esc(n.matchLa
  ${esc(n.comments || '')}</div>`;
 
 function vTeam(num) {
-  const head = (title, sub) => `<div class="sheethead"><div class="grow"><h2>${title}</h2>${sub ? `<div class="mut">${sub}</div>` : ''}</div><button data-act="close">Close</button></div>`;
+  const head = (title, sub, act) => `<div class="sheethead"><div class="grow"><h2>${title}</h2>${sub ? `<div class="mut">${sub}</div>` : ''}</div>${act || ''}<button data-act="close">Close</button></div>`;
   if (num === US) return head(`<span class="num">${esc(num)}</span> ${esc(tName(num) || 'Us')}`) + `<div class="card">That’s us. Scouting and team notes are turned off for our own team.</div>`;
   const t = teams().find(x => x.number === num) || { number: num, name: '', school: '' };
   const ms = matches().filter(m => m.red.includes(num) || m.blue.includes(num));
   const sc = notes('scout', num);
   const avg = f => { const v = sc.map(s => parseFloat(s[f])).filter(x => x > 0); return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-' };
-  return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) + `
+  return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) + `<button class="p wide" data-act="scoutfrom" data-t="${esc(num)}">Scout this team</button>
   ${(() => { const st = stats(), r = st.by.get(num); return r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '' })()}
   <div class="card"><b>Averages</b> (${sc.length} ${sc.length === 1 ? 'entry' : 'entries'})<div class="mut">Auto ${avg('autoPts')} pts · Driver ${avg('driver')} · Speed ${avg('speed')} · Scoring ${avg('scoring')} · Durability ${avg('durability')} · Overall ${avg('overall')}</div></div>
   <div class="card"><h2>Matches</h2>${ms.map(m => `<span class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}">${esc(m.label)}</span>`).join('') || '<span class="mut">None</span>'}</div>
-  <div class="card"><h2>Notes on this team</h2>${noteBox('team', num, '', 'Add a note about ' + num + '…')}${notes('team', num).length ? `<div class="foot"><button class="d" data-act="clearnotes" data-t="${num}">Clear all notes on this team</button></div>` : ''}</div>
-  <div class="card"><h2>Scouting entries</h2>${sc.map(s => sum(s)).join('') || '<span class="mut">None yet</span>'}${sc.length ? `<div class="foot"><button class="d" data-act="clearscout" data-t="${num}">Clear all scouting entries</button></div>` : ''}</div>
+  <div class="card"><h2>Scouting entries</h2>${sc.map(s => sum(s)).join('') || '<span class="mut">None yet</span>'}${notes('team', num).length ? `<h3>Older quick notes</h3>${notes('team', num).map(noteRow).join('')}` : ''}<div class="foot">${sc.length ? `<button class="d" data-act="clearscout" data-t="${num}">Clear all scouting entries</button>` : ''}${notes('team', num).length ? `<button class="d" data-act="clearnotes" data-t="${num}">Clear older quick notes</button>` : ''}</div></div>
   <div class="card"><h2>Alliance requests</h2>${notes('req', num).map(n => `<div class="note">${esc(n.text)}</div>`).join('') || '<span class="mut">None</span>'}</div>
   ${t.id ? `<div class="foot"><button class="d" data-act="delteam" data-id="${t.id}">Remove team from this event</button></div>` : ''}`;
 }
@@ -474,7 +468,10 @@ function vPick() {
   const e = evObj(); if (!e) return empty('Pick an event first.');
   const p = e.picks || [], avail = teams().filter(t => t.number !== US && !p.includes(t.number));
   return `<div class="card"><h2>Finals picklist</h2><p class="mut">Hold the ≡ handle and drag to reorder, or use the arrows. #1 is who we want most.</p><div id="pklist">${p.map((n, i) => `<div class="pk" data-i="${i}" data-flip="${esc(n)}"><span class="grip" title="Drag to reorder">≡</span><span class="num" style="width:34px;color:var(--accent-text)">${i + 1}</span><div style="flex:1;cursor:pointer" data-act="team" data-t="${n}"><span class="num">${n}</span>${esc(tName(n))}<div class="mut">${(r => r ? 'Rank ' + (r.rank ?? '–') + ' · OPR ' + f1(r.opr) + ' · ' : '')(stats().by.get(n))}${notes('req', n).length ? 'Asked to ally · ' : ''}${notes('scout', n).length} scouting entries</div></div><span class="arrows"><button data-act="pup" data-i="${i}" aria-label="Move up" ${i ? '' : 'disabled'}>▲</button><button data-act="pdn" data-i="${i}" aria-label="Move down" ${i < p.length - 1 ? '' : 'disabled'}>▼</button></span><button class="d x" data-act="prm" data-i="${i}" aria-label="Remove ${esc(n)}">×</button></div>`).join('') || empty('Nothing yet. Tap a team below to add it.')}</div></div>
-  <div class="card"><h2>Still to pick</h2><p class="mut">Tap a team to add it to the list.</p>${avail.map(t => `<button class="chip" data-act="addpick" data-t="${t.number}">${t.number}</button>`).join('') || '<span class="mut">Every team is on the list.</span>'}</div>`;
+  <div class="card"><h2>Alliance requests</h2><p class="mut">Teams that asked to ally with us, and what they say they’re good at.</p>
+    <div class="row"><input id="rq_t" list="tl" placeholder="Team #" class="narrow"><input id="rq_x" placeholder="Their strengths"><button data-act="addreq">Add</button></div>
+    ${notes('req').map(n => `<div class="note ${fresh(n)}"><div class="ntext"><b>${esc(n.ref)}</b> ${esc(tName(n.ref))} — ${esc(n.text)}</div><small>${esc(n.by || '')}${p.includes(n.ref) ? '<span>· On the picklist</span>' : `<button class="link" data-act="addpick" data-t="${esc(n.ref)}">Add to picklist</button>`}<button class="d" data-act="delnote" data-id="${n.id}">Delete</button></small></div>`).join('')}</div>
+  <div class="card"><h2>Still to pick</h2><p class="mut">Tap a team to add it to the list.</p>${avail.map(t => `<button class="chip" data-act="addpick" data-t="${t.number}">${t.number}</button>`).join('') || '<span class="mut">Every team is on the list.</span>'}</div>${tlist()}`;
 }
 const setPicks = p => upd('events', ev, { picks: p });
 
@@ -545,6 +542,7 @@ document.addEventListener('click', e => {
   }
   else if (a === 'delmatch') { if (sure(b)) del('matches', b.dataset.id) }
   else if (a === 'mopen') { const id = b.dataset.id; open[id] = !open[id]; justOpened = open[id] ? id : null; render() }
+  else if (a === 'sfilter') { sf = b.dataset.v; ls('sf', sf); render() }
   else if (a === 'mfilter') { mf = b.dataset.v; ls('mf', mf); render() }
   else if (a === 'tview') { tv = b.dataset.v; ls('tv', tv); render() }
   else if (a === 'rksort') { rks = b.dataset.v; ls('rks', rks); render() }
@@ -559,6 +557,7 @@ document.addEventListener('click', e => {
   else if (a === 'clearscout') { if (sure(b)) { notes('scout', b.dataset.t).forEach(n => del('notes', n.id)); if (scTeam === b.dataset.t) { saveT = null; draft = null; scTeam = '' } } }
   else if (a === 'clearmatch') { if (sure(b)) notes('match', b.dataset.id).forEach(n => del('notes', n.id)) }
   else if (a === 'startscout') { if (!name || b.dataset.t === US) return; flushDraft(); scTeam = b.dataset.t; loadDraft(scTeam, ''); render() }
+  else if (a === 'scoutfrom') { const t = b.dataset.t; flushDraft(); mTeam = null; tab = 'scout'; ls('tab', tab); if (name && t !== US) { scTeam = t; loadDraft(t, '') } else { scTeam = ''; draft = null } render() }
   else if (a === 'donescout') { flushDraft(); scTeam = ''; draft = null; render() }
   else if (a === 'resetdraft') { if (sure(b)) { draft = { ...newDraft(scTeam, draft.match), id: draft.id }; saveDraft(0); lastView = ''; render() } }
   else if (a === 'setname') { flushDraft(); scTeam = ''; draft = null; name = b.dataset.v; ls('name', name); render() }

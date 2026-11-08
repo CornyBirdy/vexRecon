@@ -33,7 +33,7 @@ function also holds the RobotEvents key. Preview locally with `netlify dev` (see
   elsewhere. Accent is turquoise; status and VEX alliance colours never change with the accent.
 - Buttons are secondary by default; `.p` (accent) is for the one main action on a screen.
 - App icon: Rack Suite VEX "field grid" family (Recon's mark is a turquoise viewfinder). `public/icon.svg` is the
-  source; PNGs, maskable icons and `favicon.ico` are rendered from it.
+  source (it switches light/dark with the browser, for the tab icon); `icon-light.svg` / `icon-dark.svg` are static copies the header swaps with the app's own theme; PNGs, maskable icons and `favicon.ico` are rendered from it (`icon-32-light.png` is the light-tab favicon).
 
 ## Before you push
 - Test in a real browser (Playwright is available) with the API mocked or the function run in-process, in both

@@ -141,6 +141,16 @@ input[type=search]{-webkit-appearance:none;appearance:none}
 .chev{color:var(--ink-muted);font-size:22px;line-height:1;padding:0 2px;transition:transform var(--dur-2) var(--ease)}
 .mhead .chev{transform:rotate(90deg)}.mhead .chev.up{transform:rotate(-90deg)}
 
+/* scout tab: team list rows + compact form (label left, 1-5 right) */
+.scouthead{display:flex;justify-content:space-between;align-items:center;gap:var(--s-3);margin:var(--s-2) var(--s-1) 0}
+.rels{margin-top:2px}.rel{font-size:13px;font-weight:600;margin-right:var(--s-3)}.rel.g{color:var(--success)}.rel.r{color:var(--danger)}
+.tick{font-size:13px;font-weight:700;color:var(--accent-text);white-space:nowrap}
+.scoutform h3{margin-top:var(--s-5)}
+.scoutform textarea{min-height:60px}
+.fld{display:flex;align-items:center;gap:var(--s-3);margin:var(--s-1) 0}
+.fld>span{flex:1;font-size:14px;color:var(--ink-muted)}
+.fld .rate{flex:0 0 min(215px,64%)}.fld .rate button{min-height:38px}
+
 /* login: show / hide the team code */
 .login{max-width:420px;margin:var(--s-6) auto}
 .pw{position:relative}.pw input{padding-right:calc(var(--control-h) + var(--s-2))}

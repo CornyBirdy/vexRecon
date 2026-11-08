@@ -19,10 +19,12 @@ new one there; the old one then stops working on every phone.
 
 ## What's in it
 - **Matches**: your matches or all of them, scores, W/L, and strategy / partner / opposition notes per match.
-- **Scouting**: one overall entry per scout per team, plus one per match watched; averages on each team's page.
+- **Scouting**: the Scout tab is the one place to write it (a team's page has a **Scout this team** button that opens it).
+  One overall entry per scout per team, plus one per match watched; averages on each team's page. The list opens on
+  **To scout** so you can see what's left.
 - **Rankings & OPR**: official rankings from VEX Events (refreshed with the scores), OPR / DPR / CCWM worked out
   from qualification scores, calculated standings until the official ones exist.
-- **Picklist**: drag or use the arrows; rank and OPR shown on each row.
+- **Picklist**: drag or use the arrows; rank and OPR shown on each row. Alliance requests live here too, with an **Add to picklist** button.
 - **Live and offline**: teammates' changes show up within seconds; with no signal, changes are kept on the phone
   and sent when it's back (the header shows `Offline · 3 unsaved`).
 - Light and dark mode, animations that respect "reduce motion", installable (PWA).
