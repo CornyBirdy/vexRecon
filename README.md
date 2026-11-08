@@ -37,17 +37,29 @@ works except the VEX Events import – add an event, teams and matches by hand i
 - **Works with bad wifi.** Every change shows up on your phone straight away and is queued until it reaches the server.
   The header says `Offline · 3 unsaved` while you have no signal and goes back to `Synced` once everything is sent.
   The app and the last downloaded data are saved on the phone, so it still opens with no signal.
-- **Team settings** (bottom of the Event tab): our team number and the list of scout names, shared with everyone.
-- **Rankings & OPR** (Teams tab → Rankings). Official rankings (W-L-T, WP, AP, SP) come from VEX Events and refresh
+- **Team settings** (Event tab → More): our team number and the list of scout names, shared with everyone.
+- **Event tab** is one place for everything about the event: the event picker at the top, then **Teams** (searchable, with rank / skills / OPR on each row), **Rankings**, **Skills** and **More** (alliance requests, event notes, import another event, team settings).
+- **Rankings & OPR** (Event tab → Rankings). Official rankings (W-L-T, WP, AP, SP) come from VEX Events and refresh
   with the scores. OPR, DPR and CCWM are worked out on the phone from the scored qualification matches. Before VEX Events
   has rankings, the table shows standings calculated from the scores instead (labelled as such). Rank and OPR also show on
-  each team's page and on the picklist.
+  each team's page and on the picklist. The table also has average and high score per match.
+- **Skills & season stats** (Event tab → Skills, and each team's page). Works with no matches being played: for every team at the
+  event it shows the highest and average driver and autonomous (programming) skills scores, the combined score and who leads the
+  field, either for the whole season or just this event. Tap a team for its whole season: skills by event, season W-L-T and win
+  rate, average and high score, every event it has played and its awards. This comes from VEX Events for the whole season, so it
+  needs an event imported with its event code. The server loads it a few teams at a time (about a minute for a full event, 3 requests
+  per team), the first time the app is open on an event and then again once it is 6 hours old; **Refresh** on the Skills page loads it
+  now. Everyone sees it once the last teams are in.
 - **Team code.** The eye button on the login box shows what you typed. Team settings (bottom of the Event tab) can
   show or copy the code so you can give it to a teammate.
 - **Motion.** Views fade in, the team page slides up (tap outside it to close), match notes slide open, new notes fade in
   and picklist / ranking rows glide when they move. All of it turns off with the phone's "reduce motion" setting.
 - **Scouting.** Each scout has one overall entry per team, and can add one per match they watched
-  ("What are you scouting?" at the top of the form). The team page averages all of them.
+  ("What are you scouting?" at the top of the form). The team page averages all of them. The form is split into titled sections
+  (Autonomous, Driver, Robot, Scoring, Toggle, Overall); every field keeps its label after you type in it, ratings say what 1 and 5
+  mean, and **Toggle mechanism** is a text box for describing how they toggle. The team picker is grouped into teams we play with,
+  against, both, and neither. Saved entries are shown grouped and labelled, and entries saved with the old 1-5 mechanism rating
+  still show it.
 
 ## Changes from the first version
 - Matches: score no longer wraps onto two lines; W/L badge; **Our matches / All matches** switch; non-our matches get a notes box;
