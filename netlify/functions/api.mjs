@@ -1,6 +1,6 @@
 import { getStore } from "@netlify/blobs";
 
-const COLS = ["events", "teams", "matches", "notes"];
+const COLS = ["events", "teams", "matches", "notes", "config"];
 const IDOK = /^[A-Za-z0-9_.\-]{1,200}$/;
 const SKU = /^RE-[A-Z0-9]+-\d{2}-\d{4}$/;
 const BASE = { 1: 0, 2: 1000, 6: 2000, 3: 3000, 4: 4000, 5: 5000 };
@@ -99,6 +99,22 @@ export default async (req) => {
       return json({ ok: true });
     }
 
+    // delete an event together with everything that belongs to it (teams, matches, notes)
+    if (path === "/purge") {
+      const eid = String(body.eventId || "");
+      if (!IDOK.test(eid)) return json({ error: "Bad request" }, 400);
+      const gone = ["events/" + eid];
+      for (const c of ["teams", "matches", "notes"]) {
+        const { blobs } = await store.list({ prefix: c + "/" });
+        const docs = await Promise.all(blobs.map((b) => store.get(b.key, { type: "json" })));
+        docs.forEach((d, i) => { if (d && d.eventId === eid) gone.push(blobs[i].key); });
+      }
+      for (let i = 0; i < gone.length; i += 20) await Promise.all(gone.slice(i, i + 20).map((k) => store.delete(k)));
+      await Promise.all([store.delete("_mh_" + eid), store.delete("_imp_" + eid)]);
+      await bump();
+      return json({ ok: true, deleted: gone.length });
+    }
+
     if (path === "/import") {
       const sku = String(body.sku || "").toUpperCase().trim();
       if (!SKU.test(sku)) return json({ error: "That doesn't look like an event code (e.g. RE-V5RC-26-5068)" }, 400);
@@ -111,15 +127,15 @@ export default async (req) => {
 
       // quick refresh (every few seconds): matches and scores only, and only writes if something changed
       if (body.light && old && old.reid) {
-        const last = await store.get("_imp", { type: "json" });
+        const last = await store.get("_imp_" + eid, { type: "json" });
         if (last && Date.now() - last.t < 4000) return json({ ok: true, cached: true, eventId: eid });
-        await store.setJSON("_imp", { t: Date.now() });
+        await store.setJSON("_imp_" + eid, { t: Date.now() });
         const docs = await matchDocs(eid, old.reid, old.divs || []);
         const h = JSON.stringify(docs);
-        const prev = await store.get("_mh", { type: "json" });
+        const prev = await store.get("_mh_" + eid, { type: "json" });
         if (prev && prev.h === h) return json({ ok: true, changed: false, eventId: eid });
         await writeAll(docs);
-        await store.setJSON("_mh", { h });
+        await store.setJSON("_mh_" + eid, { h });
         await bump();
         return json({ ok: true, changed: true, eventId: eid });
       }
@@ -138,7 +154,7 @@ export default async (req) => {
         docs.push([`teams/${eid}_${t.number}`, { eventId: eid, number: t.number, name: t.team_name || "", school: t.organization || "" }]);
       const md = await matchDocs(eid, e.id, divs);
       await writeAll([...docs, ...md]);
-      await store.setJSON("_mh", { h: JSON.stringify(md) });
+      await store.setJSON("_mh_" + eid, { h: JSON.stringify(md) });
       await bump();
       return json({ ok: true, eventId: eid, teams: teams.length, matches: md.length });
     }
