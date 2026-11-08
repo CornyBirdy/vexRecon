@@ -12,7 +12,7 @@ Every team's scouting is private to that team. Event lists, matches and rankings
 1. Open Recon and tap **Set up a new team**. Enter your team number; Recon checks it on VEX Events.
 2. You get a **team code** (like `G5TS-3M3X`). Share it with your team.
 3. Teammates open Recon, tap **Join your team** and enter your team number and the code.
-4. On the Event tab, type your event code (e.g. `RE-V5RC-26-5068`) and press **Import**.
+4. On the Event tab, type your event code (e.g. `RE-V5RC-26-5068` or `VE-V5-26-66510`) or paste the event page link, and press **Import**.
 
 Lost the code? Anyone already signed in can see it in **Team settings** (Event tab → More), and can make a
 new one there; the old one then stops working on every phone.

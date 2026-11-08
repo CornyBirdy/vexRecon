@@ -3,7 +3,9 @@ import { randomBytes, scryptSync, timingSafeEqual, randomInt } from "node:crypto
 
 const COLS = ["events", "teams", "matches", "notes", "config", "rankings", "stats"];
 const IDOK = /^[A-Za-z0-9_.\-]{1,200}$/;
-const SKU = /^RE-[A-Z0-9]+-\d{2}-\d{4}$/;
+// Event codes: RE-V5RC-26-5068, VE-V5-26-66510 ... The box may also hold a pasted event page link, so pull the code out of it.
+const SKU = /^[A-Z]{2,4}-[A-Z0-9]{2,8}-\d{2}-\d{3,7}$/;
+const SKU_IN = /(?<![A-Z0-9])[A-Z]{2,4}-[A-Z0-9]{2,8}-\d{2}-\d{3,7}(?![0-9])/i;
 const BASE = { 1: 0, 2: 1000, 6: 2000, 3: 3000, 4: 4000, 5: 5000 };
 const PRE = { 1: "P", 2: "Q", 3: "QF", 4: "SF", 5: "F", 6: "R16-" };
 const RE = "https://events.vex.com/api/v2";
@@ -319,8 +321,8 @@ export default async (req) => {
     }
 
     if (path === "/import") {
-      const sku = String(body.sku || "").toUpperCase().trim();
-      if (!SKU.test(sku)) return json({ error: "That doesn't look like an event code (e.g. RE-V5RC-26-5068)" }, 400);
+      const sku = ((String(body.sku || "").match(SKU_IN) || [])[0] || "").toUpperCase();
+      if (!SKU.test(sku)) return json({ error: "That doesn't look like an event code (e.g. RE-V5RC-26-5068 or VE-V5-26-66510). You can also paste the event page link." }, 400);
       const eid = sku.toLowerCase();
       const old = await store.get("events/" + eid, { type: "json" });
       const writeAll = async (docs) => {
@@ -358,7 +360,7 @@ export default async (req) => {
       // full import: event, teams, matches
       const found = await re("/events?sku%5B%5D=" + sku);
       const e = found.data && found.data[0];
-      if (!e) return json({ error: "Event not found on RobotEvents" }, 404);
+      if (!e) return json({ error: "Event " + sku + " wasn't found on VEX Events. Check the code on the event page." }, 404);
       const divs = (e.divisions || []).map((d) => d.id);
       const docs = [["events/" + eid, {
         picks: [], link: `https://events.vex.com/robot-competitions/vex-robotics-competition/${sku}.html`,

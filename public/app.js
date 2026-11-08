@@ -110,7 +110,10 @@ class NetErr extends Error {}
 class AuthErr extends Error {}
 let code = ls('code'), team = ls('team'), teamInfo = lsJ('teamInfo') || {}, pollT, impT, lastV = -1, loginErr = false, online = true, lastSync = 0;
 let outbox = lsJ('outbox') || [], inflight = null, flushing = false, polling = false, syncing = false, editSeq = 0;
-const skuOf = e => (e && e.sku) || ((e && e.link || '').match(/RE-[A-Z0-9]+-\d+-\d+/) || [])[0] || '';
+// Event codes look like RE-V5RC-26-5068 or VE-V5-26-66510. Pull one out of whatever was typed or pasted (a whole event page link is fine).
+const SKU_RE = /(?<![A-Z0-9])[A-Z]{2,4}-[A-Z0-9]{2,8}-\d{2}-\d{3,7}(?![0-9])/i;
+const parseSku = t => ((String(t || '').match(SKU_RE) || [])[0] || '').toUpperCase();
+const skuOf = e => (e && e.sku) || parseSku(e && e.link);
 
 async function api(path, body) {
   let r;
@@ -301,7 +304,7 @@ function render() {
   if (dragging) { dirty = true; return }
   document.body.classList.toggle('out', !code);
   if (!code) { $('#nav').innerHTML = ''; $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Welcome'; lastView = ''; return }
-  if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { dirty = true; return }
+  if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) || menuFor) { dirty = true; return }
   dirty = false;
   US = norm(team);
   NAMES = Array.isArray(cfg().names) ? cfg().names : [];
@@ -352,7 +355,7 @@ const noteRow = n => `<div class="note ${fresh(n)}"><div class="ntext">${esc(n.t
 const nameChips = () => NAMES.map(n => `<button class="chip ${name === n ? 'on' : ''}" data-act="setname" data-v="${esc(n)}" aria-pressed="${name === n}">${esc(n)}</button>`).join('');
 const empty = msg => `<p class="mut empty">${msg}</p>`;
 
-const evSelect = () => `<select id="evsel" aria-label="Event"><option value="">— choose event —</option>${S.events.map(x => `<option value="${x.id}" ${x.id === ev ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`;
+const evSelect = () => dd('evsel', ev, [['', '— choose event —'], ...S.events.map(x => [x.id, x.name])], { label: 'Event' });
 // install: Android / desktop Chrome offer a prompt we can trigger; iPhone needs Share → Add to Home Screen
 let installEvt = null;
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -380,7 +383,7 @@ function vAbout() {
 
 // ---------- Event tab: one place for the event, its teams, rankings, skills and notes ----------
 const segBar = (items, cur, act) => `<div class="seg" role="group">${items.map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" aria-pressed="${cur === k}" data-act="${act}" data-v="${k}">${l}</button>`).join('')}</div>`;
-const tlist = () => `<datalist id="tl">${teams().map(t => `<option value="${t.number}">${esc(t.name)}</option>`).join('')}</datalist>`;
+const tlist = () => '';
 const tiles = a => `<div class="tiles">${a.map(([v, l, sub]) => `<div class="tile"><b>${v}</b><span>${l}</span>${sub ? `<small>${sub}</small>` : ''}</div>`).join('')}</div>`;
 
 function vEvent() {
@@ -394,7 +397,7 @@ function vEvent() {
   h += segBar([['list', 'Teams'], ['rank', 'Rankings'], ['skills', 'Skills'], ['more', 'More']], tv, 'tview');
   return h + ({ list: vTeamList, rank: vRank, skills: vSkills, more: vMore })[tv]();
 }
-const importForm = sku => `<div class="row"><input id="sku" value="${esc(sku || 'RE-V5RC-26-5068')}" placeholder="Event code e.g. RE-V5RC-26-5068" aria-label="Event code"><button class="p" data-act="import">Import</button></div><p class="mut" id="impmsg"></p>`;
+const importForm = sku => `<div class="row"><input id="sku" value="${esc(sku)}" placeholder="Event code or link, e.g. RE-V5RC-26-5068" aria-label="Event code or link" autocapitalize="characters" autocomplete="off" spellcheck="false"><button class="p" data-act="import">Import</button></div><p class="mut" id="impmsg"></p>`;
 const manualForm = () => `<div class="row"><input id="newev" placeholder="Event name" aria-label="Event name"><button data-act="addev">Create</button></div>`;
 
 // More: everything that isn't a table – alliance requests, event notes, other events, settings.
@@ -479,8 +482,8 @@ function vMatches() {
         : `<h3>Notes</h3>${noteBox('match', m.id, 'gen', 'What happened in this match…')}`) + `<div class="foot"><button class="d" data-act="clearmatch" data-id="${m.id}">Clear all notes for this match</button><button class="d" data-act="delmatch" data-id="${m.id}">Delete match</button></div></div>` : ''}</div>`
   }).join('') || empty(mf === 'all' ? 'No matches yet.' : 'No matches with us yet.');
   h += `<details class="card" id="d-addmatch" ${det('d-addmatch', !all.length)}><summary><h2>Add a match manually</h2></summary><div class="row"><input id="m_l" placeholder="Label e.g. Q12"><input id="m_o" type="number" inputmode="numeric" placeholder="Match number (for sorting)"></div>
-  <h3>Red alliance</h3><div class="row"><input id="m_r1" list="tl" placeholder="Team"><input id="m_r2" list="tl" placeholder="Team"></div>
-  <h3>Blue alliance</h3><div class="row"><input id="m_b1" list="tl" placeholder="Team"><input id="m_b2" list="tl" placeholder="Team"></div>
+  <h3>Red alliance</h3><div class="row"><input id="m_r1" data-combo="teams" autocomplete="off" placeholder="Team"><input id="m_r2" data-combo="teams" autocomplete="off" placeholder="Team"></div>
+  <h3>Blue alliance</h3><div class="row"><input id="m_b1" data-combo="teams" autocomplete="off" placeholder="Team"><input id="m_b2" data-combo="teams" autocomplete="off" placeholder="Team"></div>
   <div class="foot"><button class="p" data-act="addmatch">Add match</button></div>${tlist()}</details>`;
   return h;
 }
@@ -492,7 +495,7 @@ const R = (f, v) => `<div class="rate" role="group" aria-labelledby="l_${f}">${[
 const fld = (id, label, body, hint) => `<div class="ff"><label id="l_${id}" for="${id}">${label}</label>${hint ? `<div class="mut hint">${hint}</div>` : ''}${body}</div>`;
 const fldR = (f, label, v, hint) => `<div class="ff"><div class="lbl" id="l_${f}">${label}</div>${hint ? `<div class="mut hint">${hint}</div>` : ''}${R(f, v)}</div>`;
 const sect = (title, sub, body) => `<div class="card sect"><div class="sech"><h2>${title}</h2><p class="mut">${sub}</p></div>${body}</div>`;
-const opts = (list, cur, blank) => `<option value="">${blank}</option>` + list.map(o => `<option ${cur === o ? 'selected' : ''}>${o}</option>`).join('');
+const opts = (list, blank) => [['', blank], ...list.map(o => [o, o])];
 function vScout() {
   if (!evObj()) return empty('Pick an event first.');
   if (!name) return whoCard('Who’s scouting?', 'You can scout each team once overall, plus once per match you watch, and come back to edit.');
@@ -502,7 +505,7 @@ function vScout() {
     const rel = m => { const s = side(m, scTeam); return s === 'ally' ? ' · with us' : s === 'opp' ? ' · against us' : '' };
     return `<button class="link back" data-act="donescout">‹ All teams</button>
     <div class="card"><h2><span class="num">${scTeam}</span> ${esc(tName(scTeam))}</h2>
-    ${fld('scm', 'What are you scouting?', `<select id="scm"><option value="">Overall / pit scouting (not one match)</option>${tms.map(m => `<option value="${esc(m.id)}" ${d.match === m.id ? 'selected' : ''}>Match ${esc(m.label)}${rel(m)}${scored(m) ? ' · played' : ''}</option>`).join('')}</select>`, 'Overall = your general read of the team. Pick a match to record what you saw in that one match.')}
+    ${fld('scm', 'What are you scouting?', dd('scm', d.match, [['', 'Overall / pit scouting (not one match)'], ...tms.map(m => [m.id, 'Match ' + m.label + rel(m) + (scored(m) ? ' · played' : '')])]), 'Overall = your general read of the team. Pick a match to record what you saw in that one match.')}
     <p class="mut hint">Ratings go from 1 (weakest) to 5 (best); the words under each row say what that means. Tap the same number again to clear it.</p></div>
     ${sect('Autonomous', 'What the robot does on its own, before the drivers take over.',
       fld('f_autoPts', 'Auto points scored', `<input id="f_autoPts" data-f="autoPts" inputmode="decimal" value="${esc(d.autoPts)}" placeholder="e.g. 12">`, 'Roughly how many points their autonomous scores in a match.') +
@@ -516,14 +519,14 @@ function vScout() {
       fldR('speed', 'Speed', d.speed) + fldR('durability', 'Durability', d.durability, 'Will it survive a hard match?'))}
     ${sect('Scoring', 'How well they score during a match.',
       fldR('scoring', 'Scoring ability', d.scoring) +
-      fld('f_reliable', 'Can they score reliably?', `<select id="f_reliable" data-f="reliable">${opts(['Yes, reliable', 'Sometimes', 'No, bad at scoring'], d.reliable, 'Not sure yet')}</select>`) +
+      fld('f_reliable', 'Can they score reliably?', dd('f_reliable', d.reliable, opts(['Yes, reliable', 'Sometimes', 'No, bad at scoring'], 'Not sure yet'), { f: 'reliable' })) +
       fldR('scoreCons', 'Scoring consistency', d.scoreCons, 'Do they score about the same every match?'))}
     ${sect('Toggle', 'Whether they can hold a toggle, and how they do it.',
-      fld('f_toggle', 'How well can they hold a toggle?', `<select id="f_toggle" data-f="toggle">${opts(['Very well', 'Well', 'Decent', 'Not well', 'Not at all'], d.toggle, 'Not sure yet')}</select>`) +
+      fld('f_toggle', 'How well can they hold a toggle?', dd('f_toggle', d.toggle, opts(['Very well', 'Well', 'Decent', 'Not well', 'Not at all'], 'Not sure yet'), { f: 'toggle' })) +
       fld('f_toggleMech', 'Toggle mechanism', `<textarea id="f_toggleMech" data-f="toggleMech" placeholder="e.g. Pneumatic hook on the arm that clamps the top bar">${esc(d.toggleMech)}</textarea>`, 'Describe what they use to do the toggle (not a score).'))}
     ${sect('Overall', 'Your final read on this team.',
       fldR('overall', 'Overall rating', d.overall) +
-      fld('f_good', 'Are they a good team?', `<select id="f_good" data-f="good">${opts(['Yes', 'Decent', 'No'], d.good, 'Not sure yet')}</select>`) +
+      fld('f_good', 'Are they a good team?', dd('f_good', d.good, opts(['Yes', 'Decent', 'No'], 'Not sure yet'), { f: 'good' })) +
       fld('f_comments', 'Other comments & weaknesses', `<textarea id="f_comments" data-f="comments" placeholder="Anything else we should know…">${esc(d.comments)}</textarea>`))}
     <div class="card"><div class="foot"><span class="mut grow">✔ Autosaves as you go${online ? '' : ' (kept on this phone until you’re back online)'}.</span><button class="d" data-act="resetdraft">Reset</button><button class="p" data-act="donescout">Done</button></div></div>`;
   }
@@ -602,11 +605,95 @@ function vPick() {
   const p = e.picks || [], avail = teams().filter(t => t.number !== US && !p.includes(t.number));
   return `<div class="card"><h2>Finals picklist</h2><p class="mut">Hold the ≡ handle and drag to reorder, or use the arrows. #1 is who we want most.</p><div id="pklist">${p.map((n, i) => `<div class="pk" data-i="${i}" data-flip="${esc(n)}"><span class="grip" title="Drag to reorder">≡</span><span class="num" style="width:34px;color:var(--accent-text)">${i + 1}</span><div style="flex:1;cursor:pointer" data-act="team" data-t="${n}"><span class="num">${n}</span>${esc(tName(n))}<div class="mut">${(r => r ? 'Rank ' + (r.rank ?? '–') + ' · OPR ' + f1(r.opr) + ' · ' : '')(stats().by.get(n))}${notes('req', n).length ? 'Asked to ally · ' : ''}${notes('scout', n).length} scouting entries</div></div><span class="arrows"><button data-act="pup" data-i="${i}" aria-label="Move up" ${i ? '' : 'disabled'}>▲</button><button data-act="pdn" data-i="${i}" aria-label="Move down" ${i < p.length - 1 ? '' : 'disabled'}>▼</button></span><button class="d x" data-act="prm" data-i="${i}" aria-label="Remove ${esc(n)}">×</button></div>`).join('') || empty('Nothing yet. Tap a team below to add it.')}</div></div>
   <div class="card"><h2>Alliance requests</h2><p class="mut">Teams that asked to ally with us, and what they say they’re good at.</p>
-    <div class="row"><input id="rq_t" list="tl" placeholder="Team #" class="narrow"><input id="rq_x" placeholder="Their strengths"><button data-act="addreq">Add</button></div>
+    <div class="row"><input id="rq_t" data-combo="teams" autocomplete="off" placeholder="Team #" class="narrow"><input id="rq_x" placeholder="Their strengths"><button data-act="addreq">Add</button></div>
     ${notes('req').map(n => `<div class="note ${fresh(n)}"><div class="ntext"><b>${esc(n.ref)}</b> ${esc(tName(n.ref))} — ${esc(n.text)}</div><small>${esc(n.by || '')}${p.includes(n.ref) ? '<span>· On the picklist</span>' : `<button class="link" data-act="addpick" data-t="${esc(n.ref)}">Add to picklist</button>`}<button class="d" data-act="delnote" data-id="${n.id}">Delete</button></small></div>`).join('')}</div>
   <div class="card"><h2>Still to pick</h2><p class="mut">Tap a team to add it to the list.</p>${avail.map(t => `<button class="chip" data-act="addpick" data-t="${t.number}">${t.number}</button>`).join('') || '<span class="mut">Every team is on the list.</span>'}</div>${tlist()}`;
 }
 const setPicks = p => upd('events', ev, { picks: p });
+
+// ---------- our own pop-ups (instead of the browser's) ----------
+// dd(): a button that looks like a dropdown and opens our menu. Team-number boxes get the same menu as suggestions.
+// ask(): a confirm box. Both follow the theme, work with the keyboard and respect reduce-motion.
+const DDS = {};
+function dd(id, cur, options, o = {}) {
+  DDS[id] = { options, f: o.f };
+  const hit = options.find(x => x[0] === (cur || '')) || options[0], ph = !(cur || ''); 
+  return `<button type="button" class="sel" id="${id}" data-act="dd" aria-haspopup="listbox" aria-expanded="false"${o.label ? ` aria-label="${esc(o.label)}"` : ''}><span class="sv ${ph && id !== 'evsel' ? 'ph' : ''}">${esc(hit ? hit[1] : '')}</span><span class="chev" aria-hidden="true">›</span></button>`;
+}
+let menuEl = null, menuFor = null, menuItems = [], menuAct = -1, menuPick = null, menuCombo = false;
+function placeMenu() {
+  if (!menuEl || !menuFor || !menuFor.isConnected) return closeMenu();
+  const r = menuFor.getBoundingClientRect(), vh = innerHeight, below = vh - r.bottom - 12, above = r.top - 12, up = below < 180 && above > below;
+  const mw = Math.min(innerWidth - 16, Math.max(r.width, menuCombo ? 220 : 0));
+  menuEl.style.width = mw + 'px'; menuEl.style.left = Math.max(8, Math.min(r.left, innerWidth - mw - 8)) + 'px';
+  menuEl.style.maxHeight = Math.max(120, Math.min(340, up ? above : below)) + 'px';
+  if (up) { menuEl.style.top = ''; menuEl.style.bottom = (vh - r.top + 4) + 'px' } else { menuEl.style.bottom = ''; menuEl.style.top = (r.bottom + 4) + 'px' }
+}
+function showMenu(anchor, items, onPick, combo) {
+  closeMenu(true);
+  menuFor = anchor; menuItems = items; menuPick = onPick; menuCombo = combo; menuAct = Math.max(0, items.findIndex(x => x.sel));
+  menuEl = document.createElement('div'); menuEl.id = 'menu'; menuEl.setAttribute('role', 'listbox');
+  menuEl.innerHTML = items.map((x, i) => `<button type="button" role="option" tabindex="-1" class="mi ${x.sel ? 'on' : ''} ${x.dim ? 'dim' : ''}" data-act="mpick" data-i="${i}" aria-selected="${!!x.sel}">${x.html}</button>`).join('') || '<div class="mi none">No matches</div>';
+  menuEl.addEventListener('mousedown', e => e.preventDefault()); // keep focus where it is (the text box, while typing)
+  document.body.appendChild(menuEl); anchor.setAttribute('aria-expanded', 'true'); placeMenu(); markMenu(!combo);
+}
+function markMenu(focus) {
+  if (!menuEl) return;
+  menuEl.querySelectorAll('.mi[data-i]').forEach((b, i) => { b.classList.toggle('act', i === menuAct); if (i === menuAct) { b.scrollIntoView({ block: 'nearest' }); if (focus) b.focus({ preventScroll: true }) } });
+}
+function closeMenu(keepFocus) {
+  if (!menuEl) return;
+  const a = menuFor; menuEl.remove(); menuEl = menuFor = menuPick = null; menuItems = [];
+  if (a) { a.setAttribute('aria-expanded', 'false'); if (!keepFocus && a.isConnected && a.tagName === 'BUTTON') a.focus({ preventScroll: true }) }
+  if (!keepFocus && dirty) setTimeout(() => { if (dirty) render() }, 0);
+}
+function pickMenu(i) { const f = menuPick, x = menuItems[i]; if (!f || !x) return; closeMenu(); f(x.v, x) }
+function openDd(b) {
+  const d = DDS[b.id]; if (!d) return;
+  const cur = d.value !== undefined ? d.value : (d.f ? (draft && draft[d.f]) : b.id === 'evsel' ? ev : b.id === 'scm' ? (draft && draft.match) : '') || '';
+  showMenu(b, d.options.map(([v, l]) => ({ v, html: esc(l), sel: v === cur, dim: v === '' })), v => ddPick(b.id, v, d), false);
+}
+function ddPick(id, v, d) {
+  d.value = v;
+  if (id === 'evsel') { ev = v; ls('ev', ev); render() }
+  else if (id === 'scm') { flushDraft(); loadDraft(scTeam, v); render() }
+  else if (d.f && draft && tab === 'scout') { draft[d.f] = v; saveDraft(0); const el = $('#' + id); if (el) { const hit = d.options.find(x => x[0] === v) || d.options[0]; el.querySelector('.sv').textContent = hit[1]; el.querySelector('.sv').classList.toggle('ph', !v) } }
+}
+// team suggestions for the number boxes in the manual forms
+function comboOpen(inp) {
+  const q = inp.value.trim().toLowerCase(), list = teams().filter(t => !q || (t.number + ' ' + t.name).toLowerCase().includes(q)).slice(0, 30);
+  if (!list.length || (list.length === 1 && list[0].number.toLowerCase() === q)) return closeMenu(true);
+  showMenu(inp, list.map(t => ({ v: t.number, html: `<b>${esc(t.number)}</b> <span class="mut">${esc(t.name)}</span>` })), v => { inp.value = v }, true);
+}
+document.addEventListener('pointerdown', e => { if (menuEl && !menuEl.contains(e.target) && e.target !== menuFor && !(menuFor && menuFor.contains(e.target))) closeMenu(true) }, true);
+addEventListener('resize', placeMenu); addEventListener('scroll', () => { if (menuEl) placeMenu() }, true);
+document.addEventListener('focusin', e => { if (e.target.dataset && e.target.dataset.combo) comboOpen(e.target) });
+document.addEventListener('focusout', e => { if (menuCombo && e.target === menuFor) setTimeout(() => { if (menuFor === e.target && document.activeElement !== e.target) closeMenu(true) }, 120) });
+document.addEventListener('keydown', e => {
+  if (!menuEl) return;
+  const n = menuItems.length;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(menuCombo) }
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (n) { menuAct = (menuAct + (e.key === 'ArrowDown' ? 1 : -1) + n) % n; markMenu(!menuCombo) } }
+  else if (e.key === 'Home' || e.key === 'End') { if (!menuCombo) { e.preventDefault(); menuAct = e.key === 'Home' ? 0 : n - 1; markMenu(true) } }
+  else if (e.key === 'Enter') { if (n && (!menuCombo || menuAct >= 0)) { e.preventDefault(); pickMenu(menuAct) } }
+  else if (e.key === 'Tab') closeMenu(true);
+}, true);
+document.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.combo) { menuAct = 0; comboOpen(e.target) } });
+
+function ask(title, msg, ok) {
+  return new Promise(done => {
+    const prev = document.activeElement, d = document.createElement('div'); d.id = 'dlg';
+    d.innerHTML = `<div class="dbox" role="alertdialog" aria-modal="true" aria-labelledby="dlg_t" aria-describedby="dlg_m"><h2 id="dlg_t">${esc(title)}</h2><p class="mut" id="dlg_m">${esc(msg)}</p><div class="foot"><button type="button" data-r="0">Cancel</button><button type="button" class="dng" data-r="1">${esc(ok || 'Confirm')}</button></div></div>`;
+    const end = r => { document.removeEventListener('keydown', key, true); const fin = () => { d.remove(); if (prev && prev.isConnected) prev.focus({ preventScroll: true }); done(r) }; if (reduced()) fin(); else { d.classList.add('closing'); setTimeout(fin, 160) } };
+    const key = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); end(false) }
+      else if (e.key === 'Tab') { const bs = [...d.querySelectorAll('button')], i = bs.indexOf(document.activeElement); e.preventDefault(); bs[(i + (e.shiftKey ? -1 : 1) + bs.length) % bs.length].focus() }
+    };
+    d.addEventListener('click', e => { if (e.target === d) end(false); else { const r = e.target.closest('[data-r]'); if (r) end(r.dataset.r === '1') } });
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(d); d.querySelector('[data-r="0"]').focus();
+  });
+}
 
 // ---------- events ----------
 function sure(b) {
@@ -620,14 +707,19 @@ function copyText(t) {
   if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
   return new Promise((ok, fail) => { const ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); let done = false; try { done = document.execCommand('copy') } catch (e) {} ta.remove(); done ? ok() : fail() });
 }
-function doImport(sku, msgEl) {
+function doImport(text, msgEl) {
+  const sku = parseSku(text);
+  if (!sku) { if (msgEl) msgEl.textContent = 'No event code found. Paste the code (like RE-V5RC-26-5068) or the event page link.'; return }
   if (msgEl) msgEl.textContent = 'Importing…';
-  api('/import', { sku: norm(sku) }).then(d => { ev = d.eventId; ls('ev', ev); if (msgEl) msgEl.textContent = ''; toast(`Imported ${d.teams} teams and ${d.matches} matches`); return pull() })
+  api('/import', { sku }).then(d => { ev = d.eventId; ls('ev', ev); if (msgEl) msgEl.textContent = ''; toast(`Imported ${d.teams} teams and ${d.matches} matches`); return pull() })
     .catch(e => { if (msgEl) msgEl.textContent = 'Failed: ' + String(e.message || e).slice(0, 140) });
 }
 document.addEventListener('click', e => {
   if (e.target.id === 'modal') { closeModal(); return } // tap outside the team sheet
-  const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act, v = id => $('#' + id)?.value?.trim() || '';
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  if (b.dataset.act === 'dd') { if (menuFor === b) closeMenu(); else openDd(b); return }
+  if (b.dataset.act === 'mpick') { pickMenu(+b.dataset.i); return }
+  const a = b.dataset.act, v = id => $('#' + id)?.value?.trim() || '';
   const me = name || 'Someone';
   if (a === 'tab') { flushDraft(); tab = b.dataset.v; ls('tab', tab); render() }
   else if (a === 'login') {
@@ -659,7 +751,7 @@ document.addEventListener('click', e => {
   else if (a === 'peek') { const i = $('#codein'), show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.setAttribute('aria-pressed', show); b.setAttribute('aria-label', show ? 'Hide code' : 'Show code'); b.innerHTML = show ? EYE_OFF : EYE; i.focus() }
   else if (a === 'showcode') { const c = $('#codeval'), show = c.dataset.shown !== '1'; c.dataset.shown = show ? '1' : '0'; c.textContent = show ? code : '•'.repeat(Math.max(6, code.length)); b.textContent = show ? 'Hide' : 'Show'; b.setAttribute('aria-pressed', show) }
   else if (a === 'copycode') copyText(code).then(() => toast('Team code copied'), () => toast('Couldn’t copy – tap Show and copy it by hand'));
-  else if (a === 'logout') { if (sure(b)) { if (outbox.length && !confirm(outbox.length + ' changes haven’t been sent yet and will be lost. Log out anyway?')) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; schedule(); render(); setStatus() } }
+  else if (a === 'logout') { if (sure(b)) { (outbox.length ? ask('Log out?', outbox.length + (outbox.length === 1 ? ' change hasn’t' : ' changes haven’t') + ' been sent yet and will be lost.', 'Log out anyway') : Promise.resolve(true)).then(ok => { if (!ok) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; schedule(); render(); setStatus() }) } }
   else if (a === 'import') doImport(v('sku'), $('#impmsg'));
   else if (a === 'reimport') doImport(skuOf(evObj()), $('#impmsg2'));
   else if (a === 'team') { mTeam = b.dataset.t; render() }
@@ -717,9 +809,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.id === 'evsel') { ev = t.value; ls('ev', ev); t.blur(); render() }
-  else if (t.id === 'scm') { flushDraft(); loadDraft(scTeam, t.value); t.blur(); render() }
-  else if (t.dataset.f && draft && tab === 'scout') { draft[t.dataset.f] = t.value; saveDraft(0) }
+  if (t.dataset.f && draft && tab === 'scout') { draft[t.dataset.f] = t.value; saveDraft(0) }
 });
 document.addEventListener('focusout', () => setTimeout(() => { if (dirty) render() }, 150));
 

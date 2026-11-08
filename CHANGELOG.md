@@ -7,6 +7,9 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ## [Unreleased]
 
 ### Added
+- **Recon's own pop-ups.** Dropdowns (event picker, "What are you scouting?", and the scouting form's answers), the team
+  suggestions in the manual match and alliance-request forms, and the "log out with unsent changes" question now use
+  menus and dialogs that match the app, in light and dark, with keyboard support, instead of the browser's.
 - **Skills & season stats.** Event tab → **Skills** shows every team's highest and average driver and autonomous
   (programming) skills scores and the combined score, for the whole season or just this event, sortable, with the
   field's highest and average at the top. It works with no matches being played.
@@ -30,6 +33,10 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
   left out. The averages are shown as labelled tiles.
 
 ### Fixed
+- **Importing newer event codes.** Codes like `VE-V5-26-66510` (not just `RE-V5RC-26-5068`) are now accepted, and you
+  can paste the whole event page link (even with `#general-info` on the end); the code is picked out of it. If there's
+  no code in what you typed, the box now says so.
+- **Long event names no longer run off the header card.** They wrap onto a second line instead.
 - Deleting an event now also removes its rankings from the phones straight away (they were only removed after the next
   sync).
 
