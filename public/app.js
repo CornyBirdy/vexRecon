@@ -412,9 +412,33 @@ const segBar = (items, cur, act) => `<div class="seg" role="group">${items.map((
 const tlist = () => '';
 const tiles = a => `<div class="tiles">${a.map(([v, l, sub]) => `<div class="tile"><b>${v}</b><span>${l}</span>${sub ? `<small>${sub}</small>` : ''}</div>`).join('')}</div>`;
 
+// Home: a greeting, our rank as the big number, the next match we play, and one-tap shortcuts.
+function vHome() {
+  const e = evObj(); if (!e) return '';
+  const st = stats(), me = st.by.get(US), ts = teams(), all = matches();
+  const hr = new Date().getHours(), hello = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
+  const ours = all.filter(m => side(m)), next = ours.find(m => !scored(m));
+  const away = next ? all.filter(m => !scored(m)).indexOf(next) : -1;
+  const recent = ours.filter(scored).slice(-5).map(m => { const s = side(m), a = s === 'red' ? m.rs : m.bs, b = s === 'red' ? m.bs : m.rs; return a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }).join('');
+  const hero = me && me.rank != null
+    ? `<div class="hbig">${me.rank}<small>of ${ts.length}</small></div><div class="hrow"><span class="hchip">${rec(me)}</span>${me.opr != null ? `<span class="hchip">OPR ${f1(me.opr)}</span>` : ''}${me.ccwm != null ? `<span class="hchip">CCWM ${sgn(me.ccwm)}</span>` : ''}</div>`
+    : '<div class="hbig">–</div><p class="hnote">Your ranking shows up once qualification matches are scored.</p>';
+  let nx = '';
+  if (next) {
+    const s = side(next), sides = [['r', 'Red alliance', next.red, 'red'], ['b', 'Blue alliance', next.blue, 'blue']]; if (s === 'blue') sides.reverse();
+    nx = `<div class="card next"><div class="nhead"><h2>Next match</h2><span class="chip warn">${esc(next.label)} · ${away <= 0 ? 'up next' : 'in ' + away + (away === 1 ? ' match' : ' matches')}</span></div>
+    <div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${s === col ? 'mine' : ''}"><span>${l}</span>${chips(next, arr)}</div>`).join('')}</div></div>`;
+  }
+  const qa = (t, label) => `<button data-act="tab" data-v="${t}">${TABS.find(x => x[0] === t)[1]}<span>${label}</span></button>`;
+  return `<div class="home"><div class="greet"><div><p class="mut">${hello}</p><h1>${esc(name || US)}</h1></div></div>
+  <div class="homehero"><span class="hl">Our rank${st.official ? '' : ' (calculated)'}</span>${hero}${recent ? `<div class="hrecent"><span>Recent</span>${recent}</div>` : ''}</div>
+  ${nx}<div class="qa">${qa('scout', 'Scout a team')}${qa('matches', 'Matches')}${qa('pick', 'Picklist')}</div></div>`;
+}
+
 function vEvent() {
   const e = evObj(), sku = skuOf(e);
   let h = name ? '' : whoCard('Who are you?', 'Your name goes on your notes and scouting.');
+  if (e) h += vHome();
   const me = name ? `<p class="mut meta">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></p>` : '';
   if (!e) return h + `<div class="card"><h2>Pick your event</h2>${me}${S.events.length ? evSelect() : ''}<h3>Find your event</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${ebHTML()}<h3>Or paste an event code or link</h3>${importForm('')}<h3>Or create one by hand</h3>${manualForm()}</div>` + settingsCard();
   h += `<div class="card">${evSelect()}

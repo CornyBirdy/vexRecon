@@ -26,3 +26,48 @@ input,select,textarea{background:var(--field)}
 #modal>div{background:var(--solid);border:1px solid var(--edge);border-radius:var(--r-xl);box-shadow:var(--shadow-pop)}
 #menu{background:var(--solid);border:1px solid var(--edge);border-radius:var(--r-md);box-shadow:var(--shadow-pop)}
 #dlg .dbox{background:var(--solid);border:1px solid var(--edge);border-radius:var(--r-xl);box-shadow:var(--shadow-pop)}
+
+/* ================= Redesign: Home, lists, match cards, nav ================= */
+h1{font:600 28px/1.1 var(--font);letter-spacing:-.025em;margin:0}
+.home{display:grid;gap:var(--s-3);margin:var(--s-2) 0 var(--s-4)}
+.greet{padding:var(--s-3) var(--s-2) 0}.greet p{margin:0 0 2px}
+
+/* hero: tinted glass with one big number, not a solid colour block */
+.homehero{position:relative;overflow:hidden;border-radius:var(--r-xl);padding:var(--s-6);border:1px solid color-mix(in oklch,var(--a) 32%,var(--edge));
+  background:radial-gradient(90% 130% at 100% 0%,color-mix(in oklch,var(--a) 30%,transparent),transparent 62%),linear-gradient(150deg,color-mix(in oklch,var(--a) 12%,var(--card)),var(--card));box-shadow:var(--shadow-window)}
+.hl{font-size:13px;font-weight:600;color:var(--ink-muted)}
+.hbig{font:300 68px/1 var(--font);letter-spacing:-.045em;font-variant-numeric:tabular-nums;margin:var(--s-2) 0 var(--s-4)}
+.hbig small{font-size:20px;color:var(--ink-muted);font-weight:400;margin-left:8px;letter-spacing:0}
+.hrow{display:flex;gap:var(--s-2);flex-wrap:wrap}
+.hchip{padding:7px 15px;border-radius:var(--r-pill);background:var(--field);border:1px solid var(--hair);font:600 13px var(--font);font-variant-numeric:tabular-nums}
+.hnote{margin:0;color:var(--ink-muted)}
+.hrecent{display:flex;align-items:center;gap:6px;margin-top:var(--s-4)}.hrecent>span:first-child{font-size:12.5px;color:var(--ink-muted);font-weight:600;margin-right:4px}
+
+.card.next{margin:0}.nhead{display:flex;justify-content:space-between;align-items:center;gap:var(--s-2);margin-bottom:var(--s-1)}.nhead h2{margin:0}
+.qa{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s-2)}
+.qa button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;height:auto;padding:var(--s-4) var(--s-2);border-radius:var(--r-lg);background:var(--card);border-color:var(--edge);box-shadow:var(--shadow-card);font-size:13px}
+.qa button:hover{background:var(--card);transform:translateY(-1px)}
+.qa svg{width:26px;height:26px;fill:none;stroke:var(--accent-text);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* lists become rows of soft tiles, the team number as a badge */
+.card.list{padding:var(--s-2)}
+.trow{padding:10px;border-top:0;border-radius:var(--r-md);margin:2px 0}
+.trow:hover{background:var(--field)}
+.trow .num{min-width:0;width:80px;margin:0;padding:12px 0;text-align:center;border-radius:var(--r-sm);background:var(--a-soft);font:600 15px var(--mono);letter-spacing:-.01em}
+.trow.us{box-shadow:none;background:var(--a-soft)}
+.trow.us .num{background:var(--accent-fill);color:var(--on-accent)}
+
+/* matches: big mono scores, pill results, rounder alliance blocks */
+.card.us{box-shadow:var(--shadow-card)}
+.mhead .num{font:600 21px/1 var(--font)}
+.score{font:500 18px/1 var(--mono);color:var(--ink)}
+.res{border-radius:var(--r-pill);padding:5px 11px}
+.vs .side{border-radius:var(--r-md)}
+.tile{background:var(--field);border:1px solid var(--edge);border-radius:var(--r-md);padding:var(--s-3) var(--s-4)}
+.tile b{font:300 32px/1.1 var(--font);letter-spacing:-.025em}
+
+/* segmented control and tab bar: the selected item is a raised pill */
+.seg{padding:4px}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:0 4px 14px -6px var(--shadow-c)}
+nav button.on{box-shadow:none;background:var(--a-soft);color:var(--accent-text)}
+@media(min-width:860px){.home{grid-template-columns:1.1fr 1fr;align-items:start}.greet{grid-column:1/-1}.qa{grid-column:1/-1}}

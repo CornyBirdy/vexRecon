@@ -7,6 +7,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ## [Unreleased]
 
 ### Added
+- **A new Home on the Event tab.** The Event tab now opens on a greeting, your team's rank as one big number (with your record, OPR and CCWM, and how your last few matches went), the next match you play with your alliance on the left, and one-tap shortcuts to Scout, Matches and the Picklist. Team rows are now soft tiles with the team number as a badge, match scores are bigger, and the selected tab and switch buttons are raised pills.
 - **Event browser.** You no longer need an event link to add an event. On the Event tab, the event picker's last option
   (**＋ Add another event…**), **More → Add another event** and the first-time "Pick your event" screen now have **Find an
   event**: **Our events** (everything your team is signed up for this season), **Coming up** (the next two months) and
