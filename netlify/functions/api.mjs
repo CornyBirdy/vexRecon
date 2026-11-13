@@ -1,5 +1,5 @@
 import { getStore } from "@netlify/blobs";
-import { randomBytes, scryptSync, timingSafeEqual, randomInt, createHash } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual, randomInt } from "node:crypto";
 
 const COLS = ["events", "teams", "matches", "notes", "config", "rankings", "stats"];
 const IDOK = /^[A-Za-z0-9_.\-]{1,200}$/;
@@ -119,19 +119,14 @@ async function auth(req) {
   return { rec, reg, store: getStore({ name: rec.store, consistency: "strong" }) };
 }
 
-// ---------- lost team code ----------
-// If every phone is signed out, nobody has the code. Anyone can ask for a new one; it is handed over after a waiting
-// period (RECOVER_MINUTES, default 24 hours), and any teammate still signed in sees the request and can cancel it.
-// Only a hash of the claim token is stored, so the token stays on the phone that asked.
-const RECOVER_MS = () => Math.max(0, +(Netlify.env.get("RECOVER_MINUTES") ?? 1440)) * 60000;
-const RECOVER_KEEP = 5, RECOVER_GAP = 2 * 60000;
-const sha = (t) => createHash("sha256").update(String(t)).digest("hex");
-const recKey = (n) => "_recover_" + n;
-async function pendingRecovery(reg, number) {
-  const r = (await reg.get(recKey(number), { type: "json" })) || { reqs: [] };
-  const now = Date.now(), reqs = (r.reqs || []).filter((q) => now - q.ready < 7 * 86400000); // a request lapses a week after it is ready
-  return { reqs, ready: reqs.length ? Math.min(...reqs.map((q) => q.ready)) : 0 };
-}
+// ---------- recovery key ----------
+// A second secret, made when the team is set up (or later in Team settings) and kept by the coach or mentor, not shared
+// with everyone like the team code. If every phone is logged out, it is the only thing that gets a new team code without
+// the Recon owner: nobody can recover a team from its number alone. Stored hashed, like the team code.
+const newKey = () => Array.from({ length: 16 }, (_, i) => ALPHA[randomInt(ALPHA.length)] + (i % 4 === 3 && i < 15 ? "-" : "")).join("");
+const normKey = (k) => String(k || "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+const withKey = (rec) => { const key = newKey(); return { key, rec: { ...rec, rk: hashCode(normKey(key)) } }; };
+const keyOk = (key, rec) => !!rec.rk && normKey(key).length === 16 && checkCode(normKey(key), rec.rk);
 
 // ---------- event browser ----------
 // VEX Events can't search by name, so we fetch a date window (or one team's season) and filter here.
@@ -256,32 +251,24 @@ export default async (req) => {
         if (!ADMIN || !same(body.adminCode, ADMIN)) return json({ error: "Wrong admin code" }, 401);
         const number = tid(body.team), rec = await reg.get(number, { type: "json" });
         if (!rec) return json({ error: "No such team" }, 404);
-        if (body.action === "reset") { const code = newCode(); await reg.setJSON(number, { ...rec, norm: true, ...hashCode(code) }); await reg.delete(recKey(number)); return json({ ok: true, code }); }
+        if (body.action === "reset") { const code = newCode(); await reg.setJSON(number, { ...rec, norm: true, ...hashCode(code) }); return json({ ok: true, code }); }
         if (body.action === "remove") { await reg.delete(number); return json({ ok: true }); } // the team's data store is left in place
         return json({ error: "Unknown action" }, 400);
       }
-      if (path === "/recover") { // lost team code: ask for a new one, then collect it once the wait is over
+      if (path === "/recover") { // lost team code: the recovery key gets a new one
         const number = tid(body.team), rec = TEAM_NUM.test(number) && (await reg.get(number, { type: "json" }));
         if (!rec) return json({ error: "Team " + number + " isn’t set up on Recon yet, so there’s no code to recover. Set it up as a new team." }, 404);
-        const p = await pendingRecovery(reg, number), mine = body.token ? sha(body.token) : "";
-        if (body.action === "request") {
-          const last = p.reqs.length ? Math.max(...p.reqs.map((q) => q.at)) : 0;
-          if (Date.now() - last < RECOVER_GAP) return json({ error: "A request was only just made for this team. Wait a couple of minutes." }, 429);
-          const token = randomBytes(24).toString("hex"), ready = Date.now() + RECOVER_MS();
-          await reg.setJSON(recKey(number), { reqs: [...p.reqs, { h: sha(token), at: Date.now(), ready }].slice(-RECOVER_KEEP) });
-          await getStore({ name: rec.store, consistency: "strong" }).setJSON("_v", { v: Date.now() }); // phones signed in to the team show the request
-          return json({ ok: true, token, ready, team: pub(rec) });
+        const fk = "_rfail_" + number, fails = (await reg.get(fk, { type: "json" })) || { n: 0, t: 0 };
+        if (fails.n >= 10 && Date.now() - fails.t < 10 * 60000) return json({ error: "Too many wrong keys. Try again in a few minutes." }, 429);
+        if (!rec.rk) return json({ error: "Team " + number + " doesn’t have a recovery key, so Recon can’t tell it’s you. Ask the Recon owner to reset the code.", nokey: true }, 403);
+        if (!keyOk(body.key, rec)) {
+          await reg.setJSON(fk, { n: Date.now() - fails.t < 10 * 60000 ? fails.n + 1 : 1, t: Date.now() });
+          return json({ error: "That recovery key doesn’t match team " + number + "." }, 403);
         }
-        if (body.action === "claim") {
-          const q = mine && p.reqs.find((x) => same(x.h, mine));
-          if (!q) return json({ error: "This request has expired or was cancelled. Ask for a new code again.", gone: true }, 410);
-          if (Date.now() < q.ready) return json({ error: "Not ready yet.", ready: q.ready }, 409);
-          const code = newCode();
-          await reg.setJSON(number, { ...rec, norm: true, ...hashCode(code) });
-          await reg.delete(recKey(number)); await reg.delete("_fail_" + number);
-          return json({ ok: true, team: pub(rec), code });
-        }
-        return json({ error: "Unknown action" }, 400);
+        const code = newCode();
+        await reg.setJSON(number, { ...rec, norm: true, ...hashCode(code) });
+        await reg.delete(fk); await reg.delete("_fail_" + number);
+        return json({ ok: true, team: pub(rec), code });
       }
       const number = tid(body.team);
       if (!TEAM_NUM.test(number)) return json({ error: "That doesn't look like a VEX team number (e.g. 52111A)" }, 400);
@@ -291,9 +278,9 @@ export default async (req) => {
       if (path === "/lookup") return json({ team: info || { number, name: "", org: "" }, taken });
       if (taken) return json({ error: "Team " + number + " is already set up on Recon. Ask a teammate for your team code." }, 409);
       const code = newCode();
-      const rec = { number, name: (info && info.name) || String(body.name || "").slice(0, 60), org: (info && info.org) || "", store: "team-" + number.toLowerCase(), norm: true, created: Date.now(), ...hashCode(code) };
-      await reg.setJSON(number, rec);
-      return json({ ok: true, team: pub(rec), code });
+      const made = withKey({ number, name: (info && info.name) || String(body.name || "").slice(0, 60), org: (info && info.org) || "", store: "team-" + number.toLowerCase(), norm: true, created: Date.now(), ...hashCode(code) });
+      await reg.setJSON(number, made.rec);
+      return json({ ok: true, team: pub(made.rec), code, recoveryKey: made.key });
     } catch (err) {
       return json({ error: String(err.message || err) }, 500);
     }
@@ -310,13 +297,13 @@ export default async (req) => {
     if (path === "/rotate") { // make a new team code; the old one stops working
       const code = newCode();
       await reg.setJSON(rec.number, { ...rec, norm: true, ...hashCode(code) });
-      await reg.delete(recKey(rec.number));
       return json({ ok: true, code });
     }
 
-    if (path === "/recover-cancel") { // a teammate who is still signed in stops a code-reset request
-      await reg.delete(recKey(rec.number)); await bump();
-      return json({ ok: true });
+    if (path === "/recovery-key") { // make (or replace) the recovery key; shown once, the old one stops working
+      const made = withKey(rec);
+      await reg.setJSON(rec.number, made.rec);
+      return json({ ok: true, key: made.key });
     }
 
     if (path === "/events") { // browse VEX Events: this team's events, coming up, or earlier this season
@@ -341,7 +328,7 @@ export default async (req) => {
       }
       const x = await store.get("_v", { type: "json" });
       out.v = x ? x.v : 0;
-      out.recovery = (await pendingRecovery(reg, rec.number)).ready; // when a code-reset request becomes ready (0 = none)
+      out.rk = !!rec.rk; // whether the team has a recovery key
       return json(out);
     }
 

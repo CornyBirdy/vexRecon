@@ -109,7 +109,7 @@ const API = '/api';
 class NetErr extends Error {}
 class AuthErr extends Error {}
 let code = ls('code'), team = ls('team'), teamInfo = lsJ('teamInfo') || {}, pollT, impT, lastV = -1, loginErr = false, online = true, lastSync = 0;
-let RECOVERY = 0; // when a code-reset request on this team becomes ready (0 = none); set by the server
+let RK = null, rkShown = ''; // whether the team has a recovery key (from the server); a key just made, shown until dismissed
 let outbox = lsJ('outbox') || [], inflight = null, flushing = false, polling = false, syncing = false, editSeq = 0;
 // Event codes look like RE-V5RC-26-5068 or VE-V5-26-66510. Pull one out of whatever was typed or pasted (a whole event page link is fine).
 const SKU_RE = /(?<![A-Z0-9])[A-Z]{2,4}-[A-Z0-9]{2,8}-\d{2}-\d{3,7}(?![0-9])/i;
@@ -182,7 +182,7 @@ async function pull() {
   try {
     const d = await api('/state');
     for (const k of COLS) S[k] = d[k] || [];
-    RECOVERY = d.recovery || 0;
+    RK = !!d.rk;
     for (const o of outbox) applyOp(o); // keep changes that haven't reached the server yet
     lastV = seq === editSeq ? d.v : -1; // something changed while downloading: fetch again next poll
     online = true; loaded = true; lastSync = Date.now();
@@ -239,20 +239,25 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.ad
 const EYE = '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYE_OFF = '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.7-1.3M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
 // ---------- welcome: join a team or set a new one up ----------
-let rc = lsJ('recover'); // a code reset this device asked for: { team, token, ready }
-let wmode = ls('code') ? 'join' : (ls('wmode') || (rc ? 'recover' : 'join')), wlook = null, wcreated = null, wbusy = false;
+let wmode = ls('code') ? 'join' : (ls('wmode') || 'join'), wlook = null, wcreated = null, wbusy = false;
 const credit = () => `<div class="credit"><span>Made by</span><img class="on-light" src="logo.svg" alt="Invictus 52111A"><img class="on-dark" src="logo-light.svg" alt="Invictus 52111A"></div>`;
 function loginHTML() {
   let h = `<div class="welcome"><div class="hero"><img class="heroicon" src="icon.svg" alt=""><h1>${$('.wordmark').innerHTML}</h1><p class="mut">Scouting for VEX V5 teams. Your whole team scouts together, live, even on bad venue wifi.</p></div>`;
-  if (wcreated) return h + `<div class="card"><h2>${wcreated.recovered ? 'Team ' + esc(wcreated.team.number) + ' has a new code' : 'Team ' + esc(wcreated.team.number) + ' is set up'}</h2><p class="mut">${esc(wcreated.team.name)}${wcreated.team.org ? ' · ' + esc(wcreated.team.org) : ''}</p>
-    <h3>Your team code</h3><div class="bigcode">${esc(wcreated.code)}</div>
-    <p class="mut">${wcreated.recovered ? 'The old code no longer works on any phone. ' : ''}Share it with your team: they open Recon, tap <b>Join your team</b> and enter ${esc(wcreated.team.number)} and this code. You can find it again in Team settings.</p>
-    <div class="foot"><button data-act="wcopy">Copy code</button><button class="p" data-act="wdone">Start scouting</button></div></div>` + credit() + '</div>';
+  if (wcreated) {
+    const w = wcreated, key = w.recoveryKey;
+    return h + `<div class="card"><h2>${w.recovered ? 'Team ' + esc(w.team.number) + ' has a new code' : 'Team ' + esc(w.team.number) + ' is set up'}</h2><p class="mut">${esc(w.team.name)}${w.team.org ? ' · ' + esc(w.team.org) : ''}</p>
+    <h3>Your team code</h3><div class="bigcode">${esc(w.code)}</div>
+    <p class="mut">${w.recovered ? 'The old code no longer works on any phone. ' : ''}Share it with your team: they open Recon, tap <b>Join your team</b> and enter ${esc(w.team.number)} and this code. You can find it again in Team settings.</p>
+    ${key ? `<h3>Your recovery key</h3><div class="bigcode key">${esc(key)}</div>
+    <p class="mut"><b>Keep this one to yourself</b>, for example in the coach’s password manager or an email to yourself. Don’t post it in the team chat. If everyone ever gets logged out and nobody has the team code, this key is the only way to get a new one. It’s shown once.</p>
+    <label class="chk"><input type="checkbox" id="w_saved"> I’ve saved the recovery key</label>` : ''}
+    <div class="foot"><button data-act="wcopy">Copy code</button>${key ? '<button data-act="wcopykey">Copy key</button>' : ''}<button class="p" data-act="wdone" ${key ? 'disabled' : ''}>Start scouting</button></div></div>` + credit() + '</div>';
+  }
   h += segBar([['join', 'Join your team'], ['create', 'Set up a new team']], wmode, 'wmode');
   const err = loginErr ? `<p class="err">${esc(loginErr)}</p>` : '';
   if (wmode === 'join') h += `<div class="card login"><h2>Join your team</h2><p class="mut">Enter your team number and the team code a teammate gave you.</p>
     <input id="w_team" value="${esc(team)}" placeholder="Team number, e.g. 52111A" autocapitalize="characters" autocomplete="organization" aria-label="Team number">
-    <div class="pw"><input id="codein" type="password" autocomplete="current-password" placeholder="Team code" aria-label="Team code"><button type="button" class="icon" data-act="peek" aria-label="Show code" aria-pressed="false">${EYE}</button></div>${err}<button class="p wide" data-act="login" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Opening…' : 'Open'}</button><div class="foot"><button class="link" data-act="wmode" data-v="recover">${rc ? 'Your new code request' : 'Lost the code?'}</button></div></div>`;
+    <div class="pw"><input id="codein" type="password" autocomplete="current-password" placeholder="Team code" aria-label="Team code"><button type="button" class="icon" data-act="peek" aria-label="Show code" aria-pressed="false">${EYE}</button></div>${err}<button class="p wide" data-act="login" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Opening…' : 'Open'}</button><div class="foot"><button class="link" data-act="wmode" data-v="recover">Lost the code?</button></div></div>`;
   else if (wmode === 'recover') h += recoverHTML(err);
   else {
     h += `<div class="card login"><h2>Set up a new team</h2><p class="mut">One person sets the team up, then shares the team code with everyone else.</p>
@@ -264,25 +269,16 @@ function loginHTML() {
   }
   return h + credit() + '</div>';
 }
-// Nobody on the team has the code any more: ask for a new one, collect it after the waiting period.
+// Nobody on the team has the code any more: the recovery key gets a new one.
 function recoverHTML(err) {
-  if (rc) {
-    const ready = Date.now() >= rc.ready;
-    return `<div class="card login"><h2>${ready ? 'Your new code is ready' : 'New code requested'}</h2>
-    <p class="mut">${ready ? `Team ${esc(rc.team)}’s new code is ready to collect.` : `Team ${esc(rc.team)}’s new code will be ready on <b>${esc(when(rc.ready))}</b>. Anyone on the team who is still signed in is told, and can cancel it. Open Recon on this device after that and tap <b>Get my new code</b>.`}</p>${err}
-    <button class="p wide" data-act="rcclaim" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Checking…' : ready ? 'Get my new code' : 'Check now'}</button>
-    <div class="foot"><button class="link" data-act="rcforget">Start over</button></div></div>`;
-  }
   return `<div class="card login"><h2>Lost the team code?</h2>
-    <p class="mut">If someone on your team is still signed in, they can see the code (or make a new one) in <b>Team settings</b>: Event tab → More. If nobody is, ask for a new one here. It is handed to this device after a waiting period (normally a day). Anyone still signed in is told and can cancel it.</p>
-    <input id="w_rc" value="${esc(team)}" placeholder="Team number, e.g. 52111A" autocapitalize="characters" autocomplete="organization" aria-label="Team number">${err}
-    <button class="p wide" data-act="rcreq" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Asking…' : 'Ask for a new code'}</button>
+    <p class="mut">If someone on your team is still signed in, they can see the code (or make a new one) in <b>Team settings</b>: Event tab → More. If nobody is, enter your team’s <b>recovery key</b> (made when the team was set up, usually kept by the coach) to get a new code. It stops the old one working.</p>
+    <input id="w_rc" value="${esc(team)}" placeholder="Team number, e.g. 52111A" autocapitalize="characters" autocomplete="organization" aria-label="Team number">
+    <input id="w_rk" placeholder="Recovery key" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Recovery key">${err}
+    <button class="p wide" data-act="rcgo" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Checking…' : 'Get a new team code'}</button>
+    <p class="mut fine">No recovery key? Ask the Recon owner (Invictus 52111A) to reset your team’s code.</p>
     <div class="foot"><button class="link" data-act="wmode" data-v="join">Back</button></div></div>`;
 }
-// shown on every screen to people who are signed in while someone has asked for a new code
-const rcBanner = () => !RECOVERY ? '' : `<div class="card warn" role="alert"><h2>Someone asked for a new team code</h2>
-  <p>${RECOVERY > Date.now() ? `Unless it’s cancelled, they get a new code on <b>${esc(when(RECOVERY))}</b> and the code you use now stops working.` : 'A new code is ready for them. They get it as soon as they collect it, and your code then stops working.'} If a teammate lost the code, that’s fine. If you don’t know who it is, cancel it.</p>
-  <div class="foot"><button data-act="rccancel">Cancel the request</button></div></div>`;
 // signing in as a different team than last time: drop that team's cached data and unsent changes
 function useTeam(t, info) {
   if (ls('lastTeam') !== t) { outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; ev = ''; ls('ev', ''); name = ''; ls('name', ''); lastV = -1; loaded = false }
@@ -338,7 +334,7 @@ function render() {
   if (!nav.children.length) nav.innerHTML = TABS.map(t => `<button data-act="tab" data-v="${t[0]}">${t[1]}<span>${t[2]}</span></button>`).join('');
   nav.querySelectorAll('button').forEach(b => { const on = b.dataset.v === tab; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false') });
   const key = viewKey(), same = key === lastView, before = same ? flipCapture() : null, y = scrollY;
-  $('#app').innerHTML = rcBanner() + ({ event: vEvent, matches: vMatches, scout: vScout, pick: vPick })[tab]();
+  $('#app').innerHTML = ({ event: vEvent, matches: vMatches, scout: vScout, pick: vPick })[tab]();
   scrollTo(0, same ? y : 0);
   if (same) flipPlay(before); else if (lastView && !reduced()) replay($('#app'), 'enter');
   lastView = key; justOpened = null;
@@ -389,10 +385,15 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instal
 window.addEventListener('appinstalled', () => { installEvt = null; toast('Recon is installed'); if (code) render() });
 const installRow = () => standalone() ? '' : installEvt ? `<h3>App</h3><button data-act="install">Install Recon on this device</button>`
   : isIOS ? `<h3>App</h3><p class="mut">To install: tap Share, then <b>Add to Home Screen</b>.</p>` : '';
+// The recovery key: kept by the coach, used from the sign-in screen when nobody has the team code. Shown once when made.
+const rkHTML = () => RK === null && !rkShown ? '<p class="mut">…</p>' : rkShown ? `<div class="bigcode key">${esc(rkShown)}</div><p class="mut"><b>Save it now, it won’t be shown again.</b> Keep it to yourself (a password manager or an email to yourself), not in the team chat. Any older key no longer works.</p><div class="foot"><button data-act="rkcopy">Copy key</button><button class="p" data-act="rkdone">I’ve saved it</button></div>`
+  : RK === false ? `<p class="mut">This team has <b>no recovery key</b>. If everyone is logged out and nobody has the team code, only the Recon owner can get you back in. Make one and keep it somewhere safe.</p><div class="foot"><button class="p" data-act="rkmake">Make a recovery key</button></div>`
+  : `<p class="mut">A recovery key is set. Whoever has it can get a new team code from the sign-in screen (<i>Lost the code?</i>) if everyone is logged out. We can’t show it again, but you can <button class="link" data-act="rkmake">make a new one</button> (the old key stops working).</p>`;
 const settingsCard = () => `<details class="card" id="d-settings" ${det('d-settings', false)}><summary><h2>Team settings</h2></summary>
   <p class="mut meta"><b>${esc(US)}</b> ${esc(teamInfo.name || '')}${teamInfo.org ? ' · ' + esc(teamInfo.org) : ''}</p>
   <h3>Team code</h3><div class="row"><code id="codeval" class="codeval" data-shown="0">${'•'.repeat(Math.max(6, code.length))}</code><button data-act="showcode" aria-pressed="false">Show</button><button data-act="copycode">Copy</button></div>
   <p class="mut">Anyone with your team number and this code can see and edit your team’s scouting. <button class="link" data-act="rotate">Make a new code</button></p>
+  <h3>Recovery key</h3>${rkHTML()}
   <h3>Scout names (comma separated)</h3><input id="cfg_names" value="${esc(NAMES.join(', '))}" placeholder="Names show up here as people join">
   <div class="foot"><button class="p" data-act="savecfg">Save names</button></div>
   ${installRow()}
@@ -810,25 +811,21 @@ document.addEventListener('click', e => {
   else if (a === 'copycode') copyText(code).then(() => toast('Team code copied'), () => toast('Couldn’t copy – tap Show and copy it by hand'));
   else if (a === 'logout') {
     const n = outbox.length, unsent = n ? n + (n === 1 ? ' change hasn’t' : ' changes haven’t') + ' been sent yet and will be lost. ' : '';
-    ask('Log out of this device?', unsent + 'To get back in you need the team number and the team code (' + code + '). Make sure you have the code saved before you log out.', 'Log out').then(ok => { if (!ok) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; RECOVERY = 0; EB.list = null; schedule(); render(); setStatus() })
+    ask('Log out of this device?', unsent + 'To get back in you need the team number and the team code (' + code + '). Make sure you have the code saved before you log out.', 'Log out').then(ok => { if (!ok) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; rkShown = ''; RK = null; EB.list = null; schedule(); render(); setStatus() })
   }
   else if (a === 'ebscope') { EB.scope = b.dataset.v; ls('ebs', EB.scope); EB.list = null; EB.msg = ''; render(); clearTimeout(ebT); ebLoad() }
   else if (a === 'evadd') { b.disabled = true; doImport(b.dataset.sku, t => { EB.msg = t === 'Importing…' ? 'Adding ' + b.dataset.sku + '…' : t; ebPaint() }, () => { tv = 'list'; ls('tv', tv) }) }
   else if (a === 'evopen') { const id = String(b.dataset.sku).toLowerCase(); if (S.events.some(x => x.id === id)) { ev = id; ls('ev', ev); tv = 'list'; ls('tv', tv); render() } }
-  else if (a === 'rcreq') {
-    const t = norm(v('w_rc')); if (!t) { loginErr = 'Enter your team number.'; render(); return }
+  else if (a === 'rcgo') {
+    const t = norm(v('w_rc')), k = v('w_rk'); if (!t || !k) { loginErr = 'Enter your team number and recovery key.'; render(); return }
     wbusy = true; loginErr = false; render();
-    api('/recover', { team: t, action: 'request' }).then(d => { rc = { team: d.team.number, token: d.token, ready: d.ready }; lsJ('recover', rc) })
+    api('/recover', { team: t, key: k }).then(d => { wcreated = { team: d.team, code: d.code, recovered: true } })
       .catch(e => { loginErr = e instanceof NetErr ? 'Can’t reach Recon. Check your connection.' : e.message }).finally(() => { wbusy = false; render() });
   }
-  else if (a === 'rcclaim') {
-    wbusy = true; loginErr = false; render();
-    api('/recover', { team: rc.team, action: 'claim', token: rc.token }).then(d => { rc = null; lsJ('recover', null); wcreated = { team: d.team, code: d.code, recovered: true } })
-      .catch(e => { if (e.status === 409) loginErr = 'Not ready yet. It will be ready on ' + when(e.data && e.data.ready || rc.ready) + '.'; else if (e.status === 410) { rc = null; lsJ('recover', null); loginErr = e.message } else loginErr = e instanceof NetErr ? 'Can’t reach Recon. Check your connection.' : e.message })
-      .finally(() => { wbusy = false; render() });
-  }
-  else if (a === 'rcforget') { rc = null; lsJ('recover', null); loginErr = false; render() }
-  else if (a === 'rccancel') { api('/recover-cancel', {}).then(() => { RECOVERY = 0; toast('Request cancelled'); render() }).catch(e => toast('Couldn’t cancel it: ' + e.message)) }
+  else if (a === 'rkmake') { if (RK === false || sure(b)) api('/recovery-key', {}).then(d => { RK = true; rkShown = d.key; render() }).catch(e => toast('Couldn’t make a recovery key: ' + e.message)) }
+  else if (a === 'rkcopy') copyText(rkShown).then(() => toast('Recovery key copied'), () => toast('Couldn’t copy – write it down'));
+  else if (a === 'rkdone') { rkShown = ''; render() }
+  else if (a === 'wcopykey') copyText(wcreated.recoveryKey).then(() => toast('Recovery key copied'), () => toast('Couldn’t copy – write it down'));
   else if (a === 'import') doImport(v('sku'), sayIn('impmsg'));
   else if (a === 'reimport') doImport(skuOf(evObj()), sayIn('impmsg2'));
   else if (a === 'team') { mTeam = b.dataset.t; render() }
@@ -887,6 +884,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.id === 'w_saved') { const b = document.querySelector('[data-act=wdone]'); if (b) b.disabled = !t.checked; return }
   if (t.dataset.f && draft && tab === 'scout') { draft[t.dataset.f] = t.value; saveDraft(0) }
 });
 document.addEventListener('focusout', () => setTimeout(() => { if (dirty) render() }, 150));
@@ -908,7 +906,7 @@ document.addEventListener('pointerdown', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
-  const go = { codein: 'login', w_team: 'login', w_new: 'wlookup', w_rc: 'rcreq', myname: 'addname' }[e.target.id];
+  const go = { codein: 'login', w_team: 'login', w_new: 'wlookup', w_rc: 'rcgo', w_rk: 'rcgo', myname: 'addname' }[e.target.id];
   if (go) { e.preventDefault(); document.querySelector(`[data-act=${go}]`)?.click() }
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushDraft(); else if (code) { flush(); pull() } });

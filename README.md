@@ -16,9 +16,13 @@ Every team's scouting is private to that team. Event lists, matches and rankings
    city or code) and tap **Add**. Or type an event code (e.g. `RE-V5RC-26-5068` or `VE-V5-26-66510`) or paste the event page link, and press **Import**.
 
 Lost the code? Anyone already signed in can see it in **Team settings** (Event tab → More), and can make a
-new one there; the old one then stops working on every phone. If **nobody** is signed in, tap **Lost the code?** on the
-sign-in screen and ask for a new one: it is handed to that device after a day (`RECOVER_MINUTES`), and anyone still
-signed in sees a notice and can cancel it.
+new one there; the old one then stops working on every phone.
+
+**Recovery key.** Setting up a team also gives a recovery key (like `ABCD-EFGH-JKMN-PQRS`). The coach or mentor keeps it
+somewhere safe, not in the team chat. If **nobody** is signed in and nobody has the team code, tap **Lost the code?** on
+the sign-in screen, enter the team number and recovery key, and get a new team code (the old one stops working). Teams
+without a key (set up before keys existed) make one in Team settings → Recovery key. If the key is lost too, the app's owner
+can reset the code (see Admin).
 
 ## What's in it
 - **Matches**: your matches or all of them, scores, W/L, and strategy / partner / opposition notes per match.
@@ -53,13 +57,12 @@ Environment variables (Netlify → Site configuration → Environment variables)
 | `ROBOTEVENTS_KEY` | VEX Events API key (secret). Needed to import events and to check team numbers at sign-up. |
 | `ADMIN_CODE` | Optional, secret. Lets the owner reset or remove a team (see below). |
 | `TEAM_CODE` | Only for the original single-team install: the old Invictus code. The first time 52111A signs in with it, the existing data is adopted as team 52111A's space. Can be removed afterwards. |
-| `RECOVER_MINUTES` | Optional. How long a "lost the code" request waits before the new code is handed over (default 1440 = one day). |
 | `LEGACY_TEAM`, `LEGACY_TEAM_NAME` | Optional overrides for that original team (default `52111A`, `Invictus`). |
 
 After changing variables: **Deploys → Trigger deploy**.
 
 ### Admin
-If someone sets up a team number that isn't theirs, or a team loses its code and can't wait for the one-day self-service reset:
+If someone sets up a team number that isn't theirs, or a team has lost both its code and its recovery key:
 
 ```
 curl -X POST https://<your-site>/api/admin -H "content-type: application/json" \
@@ -71,7 +74,8 @@ restored).
 
 ### Security notes
 - Team codes are generated (8 characters, about 40 bits), stored only as salted scrypt hashes, and checked in
-  constant time. After 10 wrong codes a team number is locked for 10 minutes.
+  constant time. The recovery key (16 characters, about 80 bits) is stored the same way. After 10 wrong codes or
+  wrong recovery keys a team number is locked for 10 minutes.
 - The VEX Events key never reaches the browser.
 
 ## Preview on your PC

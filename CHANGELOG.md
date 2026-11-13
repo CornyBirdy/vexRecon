@@ -12,10 +12,12 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
   event**: **Our events** (everything your team is signed up for this season), **Coming up** (the next two months) and
   **Earlier** (this season, already played). Search by name, city, region or code, then tap **Add** (or **Open** if it's already in Recon).
   Pasting a code or link still works.
-- **Lost team code.** If everyone is logged out and nobody has the code, the sign-in screen now has **Lost the code?**.
-  Ask for a new code and this device gets it after a waiting period (a day). Anyone on the team who is still signed in sees
-  a notice on every screen and can cancel the request. Making a new code in Team settings also cancels it. Until now only
-  the app's owner could fix this.
+- **Recovery key.** Setting up a team now also gives a **recovery key**, a second secret for the coach or mentor to keep
+  (not for the team chat). If everyone is logged out and nobody has the team code, **Lost the code?** on the sign-in
+  screen takes the team number and recovery key and gives a new team code straight away; the old code stops working.
+  Nobody can get in from a team number alone. The key is shown once, and you tick "I've saved the recovery key" before
+  you can start. Teams set up earlier (including Invictus) make one in **Team settings → Recovery key**, where you can also
+  make a new one (the old key stops working). Until now only the app's owner could fix a lost code.
 - Logging out now reminds you that you need the team code to get back in, and shows it.
 - **Recon's own pop-ups.** Dropdowns (event picker, "What are you scouting?", and the scouting form's answers), the team
   suggestions in the manual match and alliance-request forms, and the "log out with unsent changes" question now use

@@ -265,4 +265,5 @@ button.dng:hover{background:color-mix(in srgb,var(--danger),var(--ink) var(--tin
 .evrow .evn{font-weight:600;overflow-wrap:anywhere}.evrow .evsku{font:12px var(--mono)}
 .evrow>button{flex:0 0 auto}
 #eb .seg{margin-top:var(--s-2)}.ebmsg{margin:var(--s-2) 0 0}.ebmsg:empty{display:none}#ebres{margin-top:var(--s-2)}
-.card.warn{background:var(--warning-soft);border-color:var(--warning)}.card.warn p{margin:0}
+.bigcode.key{font-size:20px;letter-spacing:.06em;background:var(--surface-sunken);color:var(--ink);border:1px solid var(--hairline)}
+.chk{display:flex;gap:var(--s-2);align-items:center;margin:var(--s-2) 0;font-weight:600}.chk input{width:auto;min-height:0;flex:0 0 auto;accent-color:var(--accent)}
