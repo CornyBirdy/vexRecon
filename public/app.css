@@ -66,9 +66,13 @@ nav:empty{display:none}nav svg{width:22px;height:22px;fill:none;stroke:currentCo
 .num{font:700 22px/1 var(--font);font-variant-numeric:tabular-nums;margin-right:6px}
 .note{border-top:1px solid var(--hairline);padding:10px 0;white-space:pre-wrap;word-break:break-word}.note small{color:var(--ink-muted);display:flex;align-items:center;gap:var(--s-2);margin-top:2px;white-space:normal}.note small .d{margin-left:auto}
 .mut{color:var(--ink-muted);font-size:13.5px}
-.vs{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2);margin-top:var(--s-2)}.vs .side{border-radius:var(--r-sm);padding:var(--s-2) 10px 6px}
-.vs .side.mine{box-shadow:0 0 0 2px var(--accent)}
-.vs .r{background:var(--alliance-red-soft);border-top:4px solid var(--alliance-red)}.vs .b{background:var(--alliance-blue-soft);border-top:4px solid var(--alliance-blue)}.vs .side>span{font-size:12px;font-weight:700;color:var(--ink-muted);display:block}
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2);margin-top:var(--s-2)}.vs .side{border-radius:var(--r-sm);padding:calc(var(--s-2) + 4px) 10px 6px}
+/* the alliance bar is an inset shadow so it follows the rounded corners; our own alliance gets a full frame in its colour and a stronger tint */
+.vs .r{background:var(--alliance-red-soft);box-shadow:inset 0 4px 0 var(--alliance-red)}.vs .b{background:var(--alliance-blue-soft);box-shadow:inset 0 4px 0 var(--alliance-blue)}
+.vs .r.mine{background:color-mix(in srgb,var(--alliance-red) var(--mine-a),transparent);box-shadow:inset 0 0 0 2px var(--alliance-red),inset 0 5px 0 var(--alliance-red)}
+.vs .b.mine{background:color-mix(in srgb,var(--alliance-blue) var(--mine-a),transparent);box-shadow:inset 0 0 0 2px var(--alliance-blue),inset 0 5px 0 var(--alliance-blue)}
+.vs .chip.gn{background:color-mix(in srgb,var(--success) var(--soft-a),var(--surface))}.vs .chip.rd{background:color-mix(in srgb,var(--danger) var(--soft-a),var(--surface))} /* solid, so the text contrast doesn't depend on the tint behind */
+.vs .side>span{font-size:12px;font-weight:700;color:var(--ink-muted);display:block}.vs .side.mine>span{color:var(--ink)}
 
 /* 1–5 rating buttons: selected = accent-soft + accent-text + 2px underline */
 .rate{display:flex;gap:6px}

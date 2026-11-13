@@ -82,6 +82,7 @@
   --danger: #f28b82;
   --info: #8ab4f8;
   --soft-a: 14%; /* strength of the -soft backgrounds */
+  --mine-a: 26%; /* tint of our own alliance on the Matches tab */
   --tint-hover: 8%; /* hover / pressed tint mixed into a fill */
   --tint-press: 14%;
 }
@@ -92,6 +93,7 @@
     --danger: #c5221f;
     --info: #1967d2;
     --soft-a: 10%;
+    --mine-a: 17%;
   }
 }
 :root[data-theme="light"] {
@@ -100,6 +102,7 @@
   --danger: #c5221f;
   --info: #1967d2;
   --soft-a: 10%;
+  --mine-a: 17%;
 }
 :root {
   --success-soft: color-mix(in srgb, var(--success) var(--soft-a), transparent);
