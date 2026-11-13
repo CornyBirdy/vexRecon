@@ -35,8 +35,9 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ### Changed
 - **Colour instead of words on the Scout and Matches tabs.** The Scout list shows each team's matches as small coloured
   tags (green = plays with us, red = plays against us, with a one-line key) instead of "With us Q13 / Against Q5". On
-  Matches the "We're red / We're blue" badge is gone; our own alliance is framed in its colour (red or blue) with a stronger
-  tint, and the team chips on that tab have solid backgrounds so they stay easy to read.
+  Matches the "We're red / We're blue" badge is gone. **Our matches** always puts our alliance in the left column (still
+  coloured red or blue) with the other alliance on the right, and shows the score as us–them. **All matches** keeps red
+  on the left and frames our alliance in its colour. Team chips on that tab have solid backgrounds so they stay easy to read.
 - **The Event and Teams tabs are now one Event tab.** The event picker stays on top, then **Teams** (search, with rank,
   skills and OPR on each row), **Rankings**, **Skills** and **More** (event notes, import or add another event, event link,
   team settings, delete event).

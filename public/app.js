@@ -529,11 +529,12 @@ function vMatches() {
   const all = matches(), list = mf === 'all' ? all : all.filter(m => side(m));
   let h = segBar([['ours', 'Our matches'], ['all', 'All matches']], mf, 'mfilter');
   h += list.map(m => {
-    const s = side(m), o = open[m.id];
+    const s = side(m), o = open[m.id], ours = mf !== 'all' && !!s; // Our matches: our alliance is always the left column, and the score reads us–them
+    const sides = [['r', 'Red alliance', m.red, 'red'], ['b', 'Blue alliance', m.blue, 'blue']]; if (ours && s === 'blue') sides.reverse();
     let res = '';
     if (s && scored(m)) { const a = s === 'red' ? m.rs : m.bs, b = s === 'red' ? m.bs : m.rs; res = a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }
-    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" data-act="mopen" data-id="${m.id}" role="button" aria-expanded="${!!o}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${m.rs}–${m.bs}</span>` : ''}${res}<span class="grow"></span><span class="chev ${o ? 'up' : ''}" aria-hidden="true">›</span></div>
-    <div class="vs"><div class="side r ${s === 'red' ? 'mine' : ''}"><span>Red alliance</span>${chips(m, m.red)}</div><div class="side b ${s === 'blue' ? 'mine' : ''}"><span>Blue alliance</span>${chips(m, m.blue)}</div></div>
+    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" data-act="mopen" data-id="${m.id}" role="button" aria-expanded="${!!o}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${ours && s === 'blue' ? m.bs + '–' + m.rs : m.rs + '–' + m.bs}</span>` : ''}${res}<span class="grow"></span><span class="chev ${o ? 'up' : ''}" aria-hidden="true">›</span></div>
+    <div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${!ours && s === col ? 'mine' : ''}"><span>${l}</span>${chips(m, arr)}</div>`).join('')}</div>
     ${o ? `<div class="mx ${justOpened === m.id ? 'reveal' : ''}">` + (s ? `<h3>Strategy</h3>${noteBox('match', m.id, 'strat', 'Our strategy for this match…')}<h3>Our alliance</h3>${noteBox('match', m.id, 'ally', 'What our partner said / their plan…')}<h3>Opposition</h3>${noteBox('match', m.id, 'opp', 'Weaknesses, tendencies…')}`
         : `<h3>Notes</h3>${noteBox('match', m.id, 'gen', 'What happened in this match…')}`) + `<div class="foot"><button class="d" data-act="clearmatch" data-id="${m.id}">Clear all notes for this match</button><button class="d" data-act="delmatch" data-id="${m.id}">Delete match</button></div></div>` : ''}</div>`
   }).join('') || empty(mf === 'all' ? 'No matches yet.' : 'No matches with us yet.');
