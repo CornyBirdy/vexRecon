@@ -12,10 +12,13 @@ Every team's scouting is private to that team. Event lists, matches and rankings
 1. Open Recon and tap **Set up a new team**. Enter your team number; Recon checks it on VEX Events.
 2. You get a **team code** (like `G5TS-3M3X`). Share it with your team.
 3. Teammates open Recon, tap **Join your team** and enter your team number and the code.
-4. On the Event tab, type your event code (e.g. `RE-V5RC-26-5068` or `VE-V5-26-66510`) or paste the event page link, and press **Import**.
+4. On the Event tab, use **Find an event** (your team's events, what's coming up, or earlier this season; search by name,
+   city or code) and tap **Add**. Or type an event code (e.g. `RE-V5RC-26-5068` or `VE-V5-26-66510`) or paste the event page link, and press **Import**.
 
 Lost the code? Anyone already signed in can see it in **Team settings** (Event tab → More), and can make a
-new one there; the old one then stops working on every phone.
+new one there; the old one then stops working on every phone. If **nobody** is signed in, tap **Lost the code?** on the
+sign-in screen and ask for a new one: it is handed to that device after a day (`RECOVER_MINUTES`), and anyone still
+signed in sees a notice and can cancel it.
 
 ## What's in it
 - **Matches**: your matches or all of them, scores, W/L, and strategy / partner / opposition notes per match.
@@ -50,12 +53,13 @@ Environment variables (Netlify → Site configuration → Environment variables)
 | `ROBOTEVENTS_KEY` | VEX Events API key (secret). Needed to import events and to check team numbers at sign-up. |
 | `ADMIN_CODE` | Optional, secret. Lets the owner reset or remove a team (see below). |
 | `TEAM_CODE` | Only for the original single-team install: the old Invictus code. The first time 52111A signs in with it, the existing data is adopted as team 52111A's space. Can be removed afterwards. |
+| `RECOVER_MINUTES` | Optional. How long a "lost the code" request waits before the new code is handed over (default 1440 = one day). |
 | `LEGACY_TEAM`, `LEGACY_TEAM_NAME` | Optional overrides for that original team (default `52111A`, `Invictus`). |
 
 After changing variables: **Deploys → Trigger deploy**.
 
 ### Admin
-If someone sets up a team number that isn't theirs, or a team loses its code and nobody is signed in:
+If someone sets up a team number that isn't theirs, or a team loses its code and can't wait for the one-day self-service reset:
 
 ```
 curl -X POST https://<your-site>/api/admin -H "content-type: application/json" \

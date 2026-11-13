@@ -1,5 +1,5 @@
 import { getStore } from "@netlify/blobs";
-import { randomBytes, scryptSync, timingSafeEqual, randomInt } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual, randomInt, createHash } from "node:crypto";
 
 const COLS = ["events", "teams", "matches", "notes", "config", "rankings", "stats"];
 const IDOK = /^[A-Za-z0-9_.\-]{1,200}$/;
@@ -119,6 +119,71 @@ async function auth(req) {
   return { rec, reg, store: getStore({ name: rec.store, consistency: "strong" }) };
 }
 
+// ---------- lost team code ----------
+// If every phone is signed out, nobody has the code. Anyone can ask for a new one; it is handed over after a waiting
+// period (RECOVER_MINUTES, default 24 hours), and any teammate still signed in sees the request and can cancel it.
+// Only a hash of the claim token is stored, so the token stays on the phone that asked.
+const RECOVER_MS = () => Math.max(0, +(Netlify.env.get("RECOVER_MINUTES") ?? 1440)) * 60000;
+const RECOVER_KEEP = 5, RECOVER_GAP = 2 * 60000;
+const sha = (t) => createHash("sha256").update(String(t)).digest("hex");
+const recKey = (n) => "_recover_" + n;
+async function pendingRecovery(reg, number) {
+  const r = (await reg.get(recKey(number), { type: "json" })) || { reqs: [] };
+  const now = Date.now(), reqs = (r.reqs || []).filter((q) => now - q.ready < 7 * 86400000); // a request lapses a week after it is ready
+  return { reqs, ready: reqs.length ? Math.min(...reqs.map((q) => q.ready)) : 0 };
+}
+
+// ---------- event browser ----------
+// VEX Events can't search by name, so we fetch a date window (or one team's season) and filter here.
+// The fetched lists are kept in memory for a few minutes so a burst of searches costs one set of requests.
+const EV_CACHE = new Map(), EV_TTL = 10 * 60000, EV_PAGES = 12, EV_MAX = 120;
+const day = (d) => new Date(d).toISOString().slice(0, 10);
+async function allPages(p) { // first page tells us how many there are; fetch the rest a few at a time
+  const first = await re(p + "&per_page=250&page=1"), out = [...(first.data || [])], last = Math.min((first.meta && first.meta.last_page) || 1, EV_PAGES);
+  for (let pg = 2; pg <= last; pg += 4) {
+    const got = await Promise.all(Array.from({ length: Math.min(4, last - pg + 1) }, (_, i) => re(p + "&per_page=250&page=" + (pg + i))));
+    for (const g of got) out.push(...(g.data || []));
+  }
+  return out;
+}
+let progId; // VEX V5 Robotics Competition's id on VEX Events, found once
+async function v5Program() {
+  if (progId !== undefined) return progId;
+  try {
+    const list = await all("/programs");
+    const hit = list.find((x) => /^(V5RC|VRC)$/i.test(x.abbr || x.code || ""));
+    progId = hit ? hit.id : null;
+  } catch (e) { return null; }
+  return progId;
+}
+const notV5 = (e) => /^[A-Z]{2,4}-(VIQ|VAI)/i.test(e.sku || "") || /^(VIQ|VAI|ADC)/i.test((e.program && e.program.code) || "");
+function evRow(e) {
+  const l = e.location || {};
+  return { sku: e.sku, name: e.name, start: e.start, end: e.end, city: l.city || "", region: l.region || "", country: l.country || "", venue: l.venue || "", level: e.level || "", divs: (e.divisions || []).length };
+}
+async function browseEvents(scope, rec) {
+  const key = scope + "|" + (scope === "mine" ? rec.number : "");
+  const hit = EV_CACHE.get(key);
+  if (hit && Date.now() - hit.t < EV_TTL) return hit.list;
+  const now = Date.now(), d = new Date(now), yr = d.getUTCMonth() >= 4 ? d.getUTCFullYear() : d.getUTCFullYear() - 1, seasonStart = yr + "-05-01";
+  let q = "/events?_=1", sort = 1;
+  if (scope === "mine") {
+    const j = await re("/teams?number%5B%5D=" + encodeURIComponent(rec.number));
+    const t = (j.data || []).filter((x) => tid(x.number) === rec.number).sort((a, b) => ((b.program && b.program.code === "V5RC") ? 1 : 0) - ((a.program && a.program.code === "V5RC") ? 1 : 0))[0];
+    if (!t) return [];
+    q += "&team%5B%5D=" + t.id + "&start=" + seasonStart;
+  } else {
+    const pid = await v5Program();
+    if (pid) q += "&program%5B%5D=" + pid;
+    if (scope === "soon") q += "&start=" + day(now - 3 * 86400000) + "&end=" + day(now + 60 * 86400000);
+    else { q += "&start=" + seasonStart + "&end=" + day(now - 3 * 86400000); sort = -1; }
+  }
+  const list = (await allPages(q)).filter((e) => e.sku && !notV5(e)).map(evRow).sort((a, b) => sort * (new Date(a.start) - new Date(b.start)));
+  EV_CACHE.set(key, { t: Date.now(), list });
+  if (EV_CACHE.size > 40) EV_CACHE.delete(EV_CACHE.keys().next().value);
+  return list;
+}
+
 // ---------- season stats (skills, season record, awards) ----------
 // Per team, from the whole season (not just this event): the best driver / programming skills score at each event,
 // the ranking row at each event and the awards. Boiled down to a compact entry so the phones stay light.
@@ -182,7 +247,7 @@ export default async (req) => {
   const path = new URL(req.url).pathname.replace(/^\/api/, "");
 
   // ---- open endpoints: look a team up, set a new team up, admin ----
-  if (path === "/lookup" || path === "/register" || path === "/admin") {
+  if (path === "/lookup" || path === "/register" || path === "/admin" || path === "/recover") {
     try {
       const body = req.method === "POST" ? await req.json() : {};
       const reg = registry();
@@ -191,8 +256,31 @@ export default async (req) => {
         if (!ADMIN || !same(body.adminCode, ADMIN)) return json({ error: "Wrong admin code" }, 401);
         const number = tid(body.team), rec = await reg.get(number, { type: "json" });
         if (!rec) return json({ error: "No such team" }, 404);
-        if (body.action === "reset") { const code = newCode(); await reg.setJSON(number, { ...rec, norm: true, ...hashCode(code) }); return json({ ok: true, code }); }
+        if (body.action === "reset") { const code = newCode(); await reg.setJSON(number, { ...rec, norm: true, ...hashCode(code) }); await reg.delete(recKey(number)); return json({ ok: true, code }); }
         if (body.action === "remove") { await reg.delete(number); return json({ ok: true }); } // the team's data store is left in place
+        return json({ error: "Unknown action" }, 400);
+      }
+      if (path === "/recover") { // lost team code: ask for a new one, then collect it once the wait is over
+        const number = tid(body.team), rec = TEAM_NUM.test(number) && (await reg.get(number, { type: "json" }));
+        if (!rec) return json({ error: "Team " + number + " isn’t set up on Recon yet, so there’s no code to recover. Set it up as a new team." }, 404);
+        const p = await pendingRecovery(reg, number), mine = body.token ? sha(body.token) : "";
+        if (body.action === "request") {
+          const last = p.reqs.length ? Math.max(...p.reqs.map((q) => q.at)) : 0;
+          if (Date.now() - last < RECOVER_GAP) return json({ error: "A request was only just made for this team. Wait a couple of minutes." }, 429);
+          const token = randomBytes(24).toString("hex"), ready = Date.now() + RECOVER_MS();
+          await reg.setJSON(recKey(number), { reqs: [...p.reqs, { h: sha(token), at: Date.now(), ready }].slice(-RECOVER_KEEP) });
+          await getStore({ name: rec.store, consistency: "strong" }).setJSON("_v", { v: Date.now() }); // phones signed in to the team show the request
+          return json({ ok: true, token, ready, team: pub(rec) });
+        }
+        if (body.action === "claim") {
+          const q = mine && p.reqs.find((x) => same(x.h, mine));
+          if (!q) return json({ error: "This request has expired or was cancelled. Ask for a new code again.", gone: true }, 410);
+          if (Date.now() < q.ready) return json({ error: "Not ready yet.", ready: q.ready }, 409);
+          const code = newCode();
+          await reg.setJSON(number, { ...rec, norm: true, ...hashCode(code) });
+          await reg.delete(recKey(number)); await reg.delete("_fail_" + number);
+          return json({ ok: true, team: pub(rec), code });
+        }
         return json({ error: "Unknown action" }, 400);
       }
       const number = tid(body.team);
@@ -222,7 +310,21 @@ export default async (req) => {
     if (path === "/rotate") { // make a new team code; the old one stops working
       const code = newCode();
       await reg.setJSON(rec.number, { ...rec, norm: true, ...hashCode(code) });
+      await reg.delete(recKey(rec.number));
       return json({ ok: true, code });
+    }
+
+    if (path === "/recover-cancel") { // a teammate who is still signed in stops a code-reset request
+      await reg.delete(recKey(rec.number)); await bump();
+      return json({ ok: true });
+    }
+
+    if (path === "/events") { // browse VEX Events: this team's events, coming up, or earlier this season
+      const body = req.method === "POST" ? await req.json() : {}, scope = ["mine", "soon", "past"].includes(body.scope) ? body.scope : "mine";
+      if (!Netlify.env.get("ROBOTEVENTS_KEY")) return json({ error: "Event search needs the VEX Events key on the server." }, 503);
+      const all2 = await browseEvents(scope, rec), q = String(body.q || "").toLowerCase().split(/\s+/).filter(Boolean);
+      const hit = q.length ? all2.filter((e) => { const hay = [e.name, e.sku, e.city, e.region, e.country, e.venue].join(" ").toLowerCase(); return q.every((w) => hay.includes(w)); }) : all2;
+      return json({ ok: true, total: hit.length, events: hit.slice(0, EV_MAX) });
     }
 
     if (path === "/version") {
@@ -239,6 +341,7 @@ export default async (req) => {
       }
       const x = await store.get("_v", { type: "json" });
       out.v = x ? x.v : 0;
+      out.recovery = (await pendingRecovery(reg, rec.number)).ready; // when a code-reset request becomes ready (0 = none)
       return json(out);
     }
 

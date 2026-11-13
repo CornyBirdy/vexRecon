@@ -7,6 +7,16 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ## [Unreleased]
 
 ### Added
+- **Event browser.** You no longer need an event link to add an event. On the Event tab, the event picker's last option
+  (**＋ Add another event…**), **More → Add another event** and the first-time "Pick your event" screen now have **Find an
+  event**: **Our events** (everything your team is signed up for this season), **Coming up** (the next two months) and
+  **Earlier** (this season, already played). Search by name, city, region or code, then tap **Add** (or **Open** if it's already in Recon).
+  Pasting a code or link still works.
+- **Lost team code.** If everyone is logged out and nobody has the code, the sign-in screen now has **Lost the code?**.
+  Ask for a new code and this device gets it after a waiting period (a day). Anyone on the team who is still signed in sees
+  a notice on every screen and can cancel the request. Making a new code in Team settings also cancels it. Until now only
+  the app's owner could fix this.
+- Logging out now reminds you that you need the team code to get back in, and shows it.
 - **Recon's own pop-ups.** Dropdowns (event picker, "What are you scouting?", and the scouting form's answers), the team
   suggestions in the manual match and alliance-request forms, and the "log out with unsent changes" question now use
   menus and dialogs that match the app, in light and dark, with keyboard support, instead of the browser's.

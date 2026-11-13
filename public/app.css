@@ -259,3 +259,10 @@ button.sel[aria-expanded=true]{border-color:var(--accent);outline:1px solid var(
 #dlg.closing{animation:scrimOut 160ms var(--ease) forwards}#dlg.closing .dbox{animation:sheetDown 160ms var(--ease) forwards}
 button.dng{background:var(--danger);border-color:var(--danger);color:var(--on-accent)}
 button.dng:hover{background:color-mix(in srgb,var(--danger),var(--ink) var(--tint-hover))}
+
+/* event browser + code-reset notice */
+.evlist .evrow{cursor:default}.evlist .evrow:hover{background:none}
+.evrow .evn{font-weight:600;overflow-wrap:anywhere}.evrow .evsku{font:12px var(--mono)}
+.evrow>button{flex:0 0 auto}
+#eb .seg{margin-top:var(--s-2)}.ebmsg{margin:var(--s-2) 0 0}.ebmsg:empty{display:none}#ebres{margin-top:var(--s-2)}
+.card.warn{background:var(--warning-soft);border-color:var(--warning)}.card.warn p{margin:0}

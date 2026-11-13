@@ -109,6 +109,7 @@ const API = '/api';
 class NetErr extends Error {}
 class AuthErr extends Error {}
 let code = ls('code'), team = ls('team'), teamInfo = lsJ('teamInfo') || {}, pollT, impT, lastV = -1, loginErr = false, online = true, lastSync = 0;
+let RECOVERY = 0; // when a code-reset request on this team becomes ready (0 = none); set by the server
 let outbox = lsJ('outbox') || [], inflight = null, flushing = false, polling = false, syncing = false, editSeq = 0;
 // Event codes look like RE-V5RC-26-5068 or VE-V5-26-66510. Pull one out of whatever was typed or pasted (a whole event page link is fine).
 const SKU_RE = /(?<![A-Z0-9])[A-Z]{2,4}-[A-Z0-9]{2,8}-\d{2}-\d{3,7}(?![0-9])/i;
@@ -127,7 +128,7 @@ async function api(path, body) {
   }
   const j = await r.json().catch(() => ({}));
   if (r.status >= 500) throw new NetErr(j.error || ('Server error ' + r.status));
-  if (!r.ok) throw new Error(j.error || ('Error ' + r.status));
+  if (!r.ok) { const e = new Error(j.error || ('Error ' + r.status)); e.status = r.status; e.data = j; throw e }
   return j;
 }
 
@@ -181,6 +182,7 @@ async function pull() {
   try {
     const d = await api('/state');
     for (const k of COLS) S[k] = d[k] || [];
+    RECOVERY = d.recovery || 0;
     for (const o of outbox) applyOp(o); // keep changes that haven't reached the server yet
     lastV = seq === editSeq ? d.v : -1; // something changed while downloading: fetch again next poll
     online = true; loaded = true; lastSync = Date.now();
@@ -237,19 +239,21 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.ad
 const EYE = '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYE_OFF = '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.7-1.3M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
 // ---------- welcome: join a team or set a new one up ----------
-let wmode = ls('code') ? 'join' : (ls('wmode') || 'join'), wlook = null, wcreated = null, wbusy = false;
+let rc = lsJ('recover'); // a code reset this device asked for: { team, token, ready }
+let wmode = ls('code') ? 'join' : (ls('wmode') || (rc ? 'recover' : 'join')), wlook = null, wcreated = null, wbusy = false;
 const credit = () => `<div class="credit"><span>Made by</span><img class="on-light" src="logo.svg" alt="Invictus 52111A"><img class="on-dark" src="logo-light.svg" alt="Invictus 52111A"></div>`;
 function loginHTML() {
   let h = `<div class="welcome"><div class="hero"><img class="heroicon" src="icon.svg" alt=""><h1>${$('.wordmark').innerHTML}</h1><p class="mut">Scouting for VEX V5 teams. Your whole team scouts together, live, even on bad venue wifi.</p></div>`;
-  if (wcreated) return h + `<div class="card"><h2>Team ${esc(wcreated.team.number)} is set up</h2><p class="mut">${esc(wcreated.team.name)}${wcreated.team.org ? ' · ' + esc(wcreated.team.org) : ''}</p>
+  if (wcreated) return h + `<div class="card"><h2>${wcreated.recovered ? 'Team ' + esc(wcreated.team.number) + ' has a new code' : 'Team ' + esc(wcreated.team.number) + ' is set up'}</h2><p class="mut">${esc(wcreated.team.name)}${wcreated.team.org ? ' · ' + esc(wcreated.team.org) : ''}</p>
     <h3>Your team code</h3><div class="bigcode">${esc(wcreated.code)}</div>
-    <p class="mut">Share it with your team: they open Recon, tap <b>Join your team</b> and enter ${esc(wcreated.team.number)} and this code. You can find it again in Team settings.</p>
+    <p class="mut">${wcreated.recovered ? 'The old code no longer works on any phone. ' : ''}Share it with your team: they open Recon, tap <b>Join your team</b> and enter ${esc(wcreated.team.number)} and this code. You can find it again in Team settings.</p>
     <div class="foot"><button data-act="wcopy">Copy code</button><button class="p" data-act="wdone">Start scouting</button></div></div>` + credit() + '</div>';
   h += segBar([['join', 'Join your team'], ['create', 'Set up a new team']], wmode, 'wmode');
   const err = loginErr ? `<p class="err">${esc(loginErr)}</p>` : '';
   if (wmode === 'join') h += `<div class="card login"><h2>Join your team</h2><p class="mut">Enter your team number and the team code a teammate gave you.</p>
     <input id="w_team" value="${esc(team)}" placeholder="Team number, e.g. 52111A" autocapitalize="characters" autocomplete="organization" aria-label="Team number">
-    <div class="pw"><input id="codein" type="password" autocomplete="current-password" placeholder="Team code" aria-label="Team code"><button type="button" class="icon" data-act="peek" aria-label="Show code" aria-pressed="false">${EYE}</button></div>${err}<button class="p wide" data-act="login" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Opening…' : 'Open'}</button></div>`;
+    <div class="pw"><input id="codein" type="password" autocomplete="current-password" placeholder="Team code" aria-label="Team code"><button type="button" class="icon" data-act="peek" aria-label="Show code" aria-pressed="false">${EYE}</button></div>${err}<button class="p wide" data-act="login" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Opening…' : 'Open'}</button><div class="foot"><button class="link" data-act="wmode" data-v="recover">${rc ? 'Your new code request' : 'Lost the code?'}</button></div></div>`;
+  else if (wmode === 'recover') h += recoverHTML(err);
   else {
     h += `<div class="card login"><h2>Set up a new team</h2><p class="mut">One person sets the team up, then shares the team code with everyone else.</p>
     <div class="row"><input id="w_new" value="${esc(wlook ? wlook.team.number : '')}" placeholder="Team number, e.g. 52111A" autocapitalize="characters" aria-label="Team number"><button data-act="wlookup" ${wbusy ? 'disabled' : ''}>Find team</button></div>${err}`;
@@ -260,6 +264,25 @@ function loginHTML() {
   }
   return h + credit() + '</div>';
 }
+// Nobody on the team has the code any more: ask for a new one, collect it after the waiting period.
+function recoverHTML(err) {
+  if (rc) {
+    const ready = Date.now() >= rc.ready;
+    return `<div class="card login"><h2>${ready ? 'Your new code is ready' : 'New code requested'}</h2>
+    <p class="mut">${ready ? `Team ${esc(rc.team)}’s new code is ready to collect.` : `Team ${esc(rc.team)}’s new code will be ready on <b>${esc(when(rc.ready))}</b>. Anyone on the team who is still signed in is told, and can cancel it. Open Recon on this device after that and tap <b>Get my new code</b>.`}</p>${err}
+    <button class="p wide" data-act="rcclaim" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Checking…' : ready ? 'Get my new code' : 'Check now'}</button>
+    <div class="foot"><button class="link" data-act="rcforget">Start over</button></div></div>`;
+  }
+  return `<div class="card login"><h2>Lost the team code?</h2>
+    <p class="mut">If someone on your team is still signed in, they can see the code (or make a new one) in <b>Team settings</b>: Event tab → More. If nobody is, ask for a new one here. It is handed to this device after a waiting period (normally a day). Anyone still signed in is told and can cancel it.</p>
+    <input id="w_rc" value="${esc(team)}" placeholder="Team number, e.g. 52111A" autocapitalize="characters" autocomplete="organization" aria-label="Team number">${err}
+    <button class="p wide" data-act="rcreq" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Asking…' : 'Ask for a new code'}</button>
+    <div class="foot"><button class="link" data-act="wmode" data-v="join">Back</button></div></div>`;
+}
+// shown on every screen to people who are signed in while someone has asked for a new code
+const rcBanner = () => !RECOVERY ? '' : `<div class="card warn" role="alert"><h2>Someone asked for a new team code</h2>
+  <p>${RECOVERY > Date.now() ? `Unless it’s cancelled, they get a new code on <b>${esc(when(RECOVERY))}</b> and the code you use now stops working.` : 'A new code is ready for them. They get it as soon as they collect it, and your code then stops working.'} If a teammate lost the code, that’s fine. If you don’t know who it is, cancel it.</p>
+  <div class="foot"><button data-act="rccancel">Cancel the request</button></div></div>`;
 // signing in as a different team than last time: drop that team's cached data and unsent changes
 function useTeam(t, info) {
   if (ls('lastTeam') !== t) { outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; ev = ''; ls('ev', ''); name = ''; ls('name', ''); lastV = -1; loaded = false }
@@ -315,7 +338,7 @@ function render() {
   if (!nav.children.length) nav.innerHTML = TABS.map(t => `<button data-act="tab" data-v="${t[0]}">${t[1]}<span>${t[2]}</span></button>`).join('');
   nav.querySelectorAll('button').forEach(b => { const on = b.dataset.v === tab; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false') });
   const key = viewKey(), same = key === lastView, before = same ? flipCapture() : null, y = scrollY;
-  $('#app').innerHTML = ({ event: vEvent, matches: vMatches, scout: vScout, pick: vPick })[tab]();
+  $('#app').innerHTML = rcBanner() + ({ event: vEvent, matches: vMatches, scout: vScout, pick: vPick })[tab]();
   scrollTo(0, same ? y : 0);
   if (same) flipPlay(before); else if (lastView && !reduced()) replay($('#app'), 'enter');
   lastView = key; justOpened = null;
@@ -326,6 +349,7 @@ function render() {
   modalShown = !!mTeam;
   seenNotes = new Set(S.notes.map(n => n.id));
   renderedAt = performance.now();
+  ebKick();
 }
 function closeModal() {
   const md = $('#modal');
@@ -341,6 +365,7 @@ document.addEventListener('toggle', e => {
   const d = e.target; if (d.tagName !== 'DETAILS' || !d.id) return;
   const was = d.id in dState ? dState[d.id] : null; dState[d.id] = d.open;
   if (d.open && was !== true && performance.now() - renderedAt > 60 && !reduced()) replay(d, 'reveal');
+  if (d.open) ebKick();
 }, true);
 
 // Note boxes: one line until you tap in; "Add" lights up once there's text. Half-typed notes survive re-renders.
@@ -355,7 +380,7 @@ const noteRow = n => `<div class="note ${fresh(n)}"><div class="ntext">${esc(n.t
 const nameChips = () => NAMES.map(n => `<button class="chip ${name === n ? 'on' : ''}" data-act="setname" data-v="${esc(n)}" aria-pressed="${name === n}">${esc(n)}</button>`).join('');
 const empty = msg => `<p class="mut empty">${msg}</p>`;
 
-const evSelect = () => dd('evsel', ev, [['', '— choose event —'], ...S.events.map(x => [x.id, x.name])], { label: 'Event' });
+const evSelect = () => dd('evsel', ev, [['', '— choose event —'], ...S.events.map(x => [x.id, x.name]), ['+add', '＋ Add another event…']], { label: 'Event' });
 // install: Android / desktop Chrome offer a prompt we can trigger; iPhone needs Share → Add to Home Screen
 let installEvt = null;
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -390,7 +415,7 @@ function vEvent() {
   const e = evObj(), sku = skuOf(e);
   let h = name ? '' : whoCard('Who are you?', 'Your name goes on your notes and scouting.');
   const me = name ? `<p class="mut meta">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></p>` : '';
-  if (!e) return h + `<div class="card"><h2>Pick your event</h2>${me}${S.events.length ? evSelect() : ''}<h3>Import from VEX Events</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${importForm('')}<h3>Or create one by hand</h3>${manualForm()}</div>` + settingsCard();
+  if (!e) return h + `<div class="card"><h2>Pick your event</h2>${me}${S.events.length ? evSelect() : ''}<h3>Find your event</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${ebHTML()}<h3>Or paste an event code or link</h3>${importForm('')}<h3>Or create one by hand</h3>${manualForm()}</div>` + settingsCard();
   h += `<div class="card">${evSelect()}
     <p class="mut meta">${sku ? 'From VEX Events · ' + esc(sku) + ' · <button class="link" data-act="reimport">Update now</button>' : 'Created by hand'}${e.link ? ` · <a href="${esc(e.link)}" target="_blank" rel="noopener">Event page ↗</a>` : ''} <span id="impmsg2"></span></p>
     ${me}</div>`;
@@ -404,7 +429,7 @@ const manualForm = () => `<div class="row"><input id="newev" placeholder="Event 
 function vMore() {
   const e = evObj(), sku = skuOf(e);
   return `<div class="card"><h2>Event notes</h2>${noteBox('event', '', '', 'Anything about this event…')}</div>
-  <details class="card" id="d-more" ${det('d-more', false)}><summary><h2>Import or add another event</h2></summary>${importForm(sku)}${manualForm()}</details>
+  <details class="card" id="d-more" ${det('d-more', false)}><summary><h2>Add another event</h2></summary><h3>Find an event</h3>${ebHTML()}<h3>Or paste an event code or link</h3>${importForm('')}<h3>Or create one by hand</h3>${manualForm()}</details>
   ${sku ? '' : `<details class="card" id="d-link" ${det('d-link', false)}><summary><h2>Event link</h2></summary><input id="evlink" value="${esc(e.link || '')}" placeholder="Paste the VEX event link here" aria-label="Event link"></details>`}
   ${settingsCard()}
   <div class="foot"><button class="d" data-act="delev">Delete this event and all its notes</button></div>`;
@@ -465,6 +490,36 @@ function vSkills() {
   <p class="mut">Ranked by ${sortName} score ${scopeName}, among the teams at this event. ${sks === 'season' ? 'Avg = average combined score across the events they’ve done skills at. ' : ''}Tap a team for its full season.</p>
   <div class="foot"><span class="stmsg mut">${statsBusy ? 'Loading season stats…' : 'Updated ' + new Date(d.t).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span><span class="grow"></span>${refresh}</div></div>`;
 }
+// ---------- event browser: find an event on VEX Events instead of typing its code ----------
+// Results come from the server (/api/events). Typing filters them there (after a short pause); the list is painted
+// straight into #ebres so typing in the search box never fights with a full re-render.
+let EB = { scope: ls('ebs') || 'mine', q: '', list: null, total: 0, busy: false, err: '', msg: '' }, ebT, ebSeq = 0;
+if (!['mine', 'soon', 'past'].includes(EB.scope)) EB.scope = 'mine';
+const ebDay = d => new Date(String(d).slice(0, 10) + 'T12:00:00');
+const ebDates = (a, b) => { if (!a) return ''; const f = d => ebDay(d).toLocaleDateString([], { day: 'numeric', month: 'short' }), x = f(a), y = b ? f(b) : x; return x === y ? x : x + ' – ' + y };
+function ebRows() {
+  if (EB.err) return `<p class="err">${esc(EB.err)}</p>`;
+  if (!EB.list) return '';
+  if (!EB.list.length) return empty(EB.q ? 'No events match that.' : EB.scope === 'mine' ? 'No events found for your team this season yet. Try Coming up, or paste an event code below.' : 'No events found.');
+  const have = new Map(S.events.map(e => [skuOf(e), e.id]));
+  return `<div class="card list evlist">${EB.list.map(e => {
+    const place = [e.city, e.region, e.country].filter(Boolean).join(', '), got = have.has(e.sku.toUpperCase());
+    return `<div class="trow evrow"><div class="grow"><div class="evn">${esc(e.name)}</div><div class="mut">${esc([ebDates(e.start, e.end), place, e.level].filter(Boolean).join(' · '))}</div><div class="mut evsku">${esc(e.sku)}</div></div>${got ? `<button data-act="evopen" data-sku="${esc(e.sku)}" aria-label="Open ${esc(e.name)}">Open</button>` : `<button data-act="evadd" data-sku="${esc(e.sku)}" aria-label="Add ${esc(e.name)}">Add</button>`}</div>`;
+  }).join('')}</div>${EB.total > EB.list.length ? `<p class="mut">Showing ${EB.list.length} of ${EB.total}. Type in the box to narrow it down.</p>` : ''}`;
+}
+const ebMsgText = () => EB.msg || (EB.busy ? 'Searching VEX Events…' : '');
+const ebHTML = () => `<div id="eb">${segBar([['mine', 'Our events'], ['soon', 'Coming up'], ['past', 'Earlier']], EB.scope, 'ebscope')}
+  <input id="ebq" type="search" value="${esc(EB.q)}" placeholder="Search by name, city, region or code…" aria-label="Search events" autocomplete="off" spellcheck="false">
+  <p class="mut ebmsg" id="ebmsg" role="status">${esc(ebMsgText())}</p><div id="ebres">${ebRows()}</div></div>`;
+function ebPaint() { const r = $('#ebres'), m = $('#ebmsg'); if (r) r.innerHTML = ebRows(); if (m) m.textContent = ebMsgText() }
+async function ebLoad() {
+  const seq = ++ebSeq; EB.busy = true; EB.err = ''; ebPaint();
+  try { const d = await api('/events', { scope: EB.scope, q: EB.q }); if (seq !== ebSeq) return; EB.list = d.events || []; EB.total = d.total || EB.list.length }
+  catch (e) { if (seq !== ebSeq) return; EB.list = []; EB.total = 0; EB.err = e instanceof NetErr ? 'Finding events needs a connection. You can still paste an event code below.' : e instanceof AuthErr ? '' : 'Couldn’t load events: ' + String(e.message || e).slice(0, 140) }
+  EB.busy = false; ebPaint();
+}
+// load the first time the browser is actually on screen (not while its folded section is closed)
+function ebKick() { const el = $('#eb'); if (el && !el.closest('details:not([open])') && EB.list === null && !EB.busy && code) ebLoad() }
 function filt(q) { q = q.toLowerCase(); document.querySelectorAll('#tl2 .trow').forEach(c => c.style.display = c.dataset.q.includes(q) ? '' : 'none') }
 
 const chips = (m, arr) => arr.map(n => `<button class="chip ${n === US ? 'me' : cls(m, n)}" data-act="team" data-t="${n}">${n}</button>`).join('');
@@ -655,7 +710,8 @@ function openDd(b) {
 }
 function ddPick(id, v, d) {
   d.value = v;
-  if (id === 'evsel') { ev = v; ls('ev', ev); render() }
+  if (id === 'evsel' && v === '+add') { tv = 'more'; ls('tv', tv); dState['d-more'] = true; render(); const el = $('#d-more'); if (el) el.scrollIntoView({ block: 'start' }) }
+  else if (id === 'evsel') { ev = v; ls('ev', ev); render() }
   else if (id === 'scm') { flushDraft(); loadDraft(scTeam, v); render() }
   else if (d.f && draft && tab === 'scout') { draft[d.f] = v; saveDraft(0); const el = $('#' + id); if (el) { const hit = d.options.find(x => x[0] === v) || d.options[0]; el.querySelector('.sv').textContent = hit[1]; el.querySelector('.sv').classList.toggle('ph', !v) } }
 }
@@ -707,13 +763,14 @@ function copyText(t) {
   if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
   return new Promise((ok, fail) => { const ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); let done = false; try { done = document.execCommand('copy') } catch (e) {} ta.remove(); done ? ok() : fail() });
 }
-function doImport(text, msgEl) {
+function doImport(text, say, after) {
   const sku = parseSku(text);
-  if (!sku) { if (msgEl) msgEl.textContent = 'No event code found. Paste the code (like RE-V5RC-26-5068) or the event page link.'; return }
-  if (msgEl) msgEl.textContent = 'Importing…';
-  api('/import', { sku }).then(d => { ev = d.eventId; ls('ev', ev); if (msgEl) msgEl.textContent = ''; toast(`Imported ${d.teams} teams and ${d.matches} matches`); return pull() })
-    .catch(e => { if (msgEl) msgEl.textContent = 'Failed: ' + String(e.message || e).slice(0, 140) });
+  if (!sku) { say('No event code found. Paste the code (like RE-V5RC-26-5068) or the event page link.'); return }
+  say('Importing…');
+  api('/import', { sku }).then(d => { ev = d.eventId; ls('ev', ev); if (after) after(); say(''); toast(`Imported ${d.teams} teams and ${d.matches} matches`); return pull() })
+    .catch(e => say('Failed: ' + String(e.message || e).slice(0, 140)));
 }
+const sayIn = id => t => { const el = $('#' + id); if (el) el.textContent = t };
 document.addEventListener('click', e => {
   if (e.target.id === 'modal') { closeModal(); return } // tap outside the team sheet
   const b = e.target.closest('[data-act]'); if (!b) return;
@@ -751,9 +808,29 @@ document.addEventListener('click', e => {
   else if (a === 'peek') { const i = $('#codein'), show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.setAttribute('aria-pressed', show); b.setAttribute('aria-label', show ? 'Hide code' : 'Show code'); b.innerHTML = show ? EYE_OFF : EYE; i.focus() }
   else if (a === 'showcode') { const c = $('#codeval'), show = c.dataset.shown !== '1'; c.dataset.shown = show ? '1' : '0'; c.textContent = show ? code : '•'.repeat(Math.max(6, code.length)); b.textContent = show ? 'Hide' : 'Show'; b.setAttribute('aria-pressed', show) }
   else if (a === 'copycode') copyText(code).then(() => toast('Team code copied'), () => toast('Couldn’t copy – tap Show and copy it by hand'));
-  else if (a === 'logout') { if (sure(b)) { (outbox.length ? ask('Log out?', outbox.length + (outbox.length === 1 ? ' change hasn’t' : ' changes haven’t') + ' been sent yet and will be lost.', 'Log out anyway') : Promise.resolve(true)).then(ok => { if (!ok) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; schedule(); render(); setStatus() }) } }
-  else if (a === 'import') doImport(v('sku'), $('#impmsg'));
-  else if (a === 'reimport') doImport(skuOf(evObj()), $('#impmsg2'));
+  else if (a === 'logout') {
+    const n = outbox.length, unsent = n ? n + (n === 1 ? ' change hasn’t' : ' changes haven’t') + ' been sent yet and will be lost. ' : '';
+    ask('Log out of this device?', unsent + 'To get back in you need the team number and the team code (' + code + '). Make sure you have the code saved before you log out.', 'Log out').then(ok => { if (!ok) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; RECOVERY = 0; EB.list = null; schedule(); render(); setStatus() })
+  }
+  else if (a === 'ebscope') { EB.scope = b.dataset.v; ls('ebs', EB.scope); EB.list = null; EB.msg = ''; render(); clearTimeout(ebT); ebLoad() }
+  else if (a === 'evadd') { b.disabled = true; doImport(b.dataset.sku, t => { EB.msg = t === 'Importing…' ? 'Adding ' + b.dataset.sku + '…' : t; ebPaint() }, () => { tv = 'list'; ls('tv', tv) }) }
+  else if (a === 'evopen') { const id = String(b.dataset.sku).toLowerCase(); if (S.events.some(x => x.id === id)) { ev = id; ls('ev', ev); tv = 'list'; ls('tv', tv); render() } }
+  else if (a === 'rcreq') {
+    const t = norm(v('w_rc')); if (!t) { loginErr = 'Enter your team number.'; render(); return }
+    wbusy = true; loginErr = false; render();
+    api('/recover', { team: t, action: 'request' }).then(d => { rc = { team: d.team.number, token: d.token, ready: d.ready }; lsJ('recover', rc) })
+      .catch(e => { loginErr = e instanceof NetErr ? 'Can’t reach Recon. Check your connection.' : e.message }).finally(() => { wbusy = false; render() });
+  }
+  else if (a === 'rcclaim') {
+    wbusy = true; loginErr = false; render();
+    api('/recover', { team: rc.team, action: 'claim', token: rc.token }).then(d => { rc = null; lsJ('recover', null); wcreated = { team: d.team, code: d.code, recovered: true } })
+      .catch(e => { if (e.status === 409) loginErr = 'Not ready yet. It will be ready on ' + when(e.data && e.data.ready || rc.ready) + '.'; else if (e.status === 410) { rc = null; lsJ('recover', null); loginErr = e.message } else loginErr = e instanceof NetErr ? 'Can’t reach Recon. Check your connection.' : e.message })
+      .finally(() => { wbusy = false; render() });
+  }
+  else if (a === 'rcforget') { rc = null; lsJ('recover', null); loginErr = false; render() }
+  else if (a === 'rccancel') { api('/recover-cancel', {}).then(() => { RECOVERY = 0; toast('Request cancelled'); render() }).catch(e => toast('Couldn’t cancel it: ' + e.message)) }
+  else if (a === 'import') doImport(v('sku'), sayIn('impmsg'));
+  else if (a === 'reimport') doImport(skuOf(evObj()), sayIn('impmsg2'));
   else if (a === 'team') { mTeam = b.dataset.t; render() }
   else if (a === 'close') closeModal();
   else if (a === 'addev') { const n = v('newev'); if (n) { const id = uid(); put('events', id, { name: n, link: '', picks: [] }); ev = id; ls('ev', id) } }
@@ -805,6 +882,7 @@ document.addEventListener('input', e => {
   if (t.dataset.f && draft && tab === 'scout') { draft[t.dataset.f] = t.value; saveDraft() }
   else if (t.dataset.draft) { drafts[t.dataset.draft] = t.value; t.closest('.composer').classList.toggle('has', !!t.value.trim()) }
   else if (t.id === 'tsearch') { tq = t.value; filt(tq) }
+  else if (t.id === 'ebq') { EB.q = t.value; clearTimeout(ebT); ebT = setTimeout(ebLoad, 350) }
   else if (t.id === 'evlink') { const id = ev, val = t.value.trim(); clearTimeout(linkT); linkT = setTimeout(() => upd('events', id, { link: val }), 600) }
 });
 document.addEventListener('change', e => {
@@ -830,7 +908,7 @@ document.addEventListener('pointerdown', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
-  const go = { codein: 'login', w_team: 'login', w_new: 'wlookup', myname: 'addname' }[e.target.id];
+  const go = { codein: 'login', w_team: 'login', w_new: 'wlookup', w_rc: 'rcreq', myname: 'addname' }[e.target.id];
   if (go) { e.preventDefault(); document.querySelector(`[data-act=${go}]`)?.click() }
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushDraft(); else if (code) { flush(); pull() } });
