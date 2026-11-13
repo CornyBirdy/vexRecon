@@ -33,6 +33,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
   The stats load the first time an event is opened and again once they are 6 hours old; **Refresh** loads them now.
 
 ### Changed
+- **New look: Rack Glass.** Recon now sits on a soft turquoise colour background with frosted header, cards and tab bar, much rounder corners and pill-shaped buttons. The main button uses a very light turquoise gradient. Text is now Plus Jakarta Sans (team numbers and scores stay in a code font), and both fonts are bundled so Recon still opens offline. Light and dark match, and the red and blue alliance colours are unchanged. Menus, pop-ups and the team sheet stay solid so they are always easy to read.
 - **Colour instead of words on the Scout and Matches tabs.** The Scout list shows each team's matches as small coloured
   tags (green = plays with us, red = plays against us, with a one-line key) instead of "With us Q13 / Against Q5". On
   Matches the "We're red / We're blue" badge is gone. **Our matches** always puts our alliance in the left column (still

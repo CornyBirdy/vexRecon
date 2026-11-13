@@ -1,0 +1,28 @@
+/* Rack Glass layer: ground, frosted header / cards / tab bar, pill controls. Colours, radii and blur come from tokens.css. */
+body{background:var(--ground-base)}
+body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--ground-mesh);pointer-events:none}
+
+header{background:var(--glass);border-color:var(--edge);border-radius:var(--r-xl);box-shadow:var(--shadow-window);backdrop-filter:blur(var(--blur)) saturate(1.4);-webkit-backdrop-filter:blur(var(--blur)) saturate(1.4)}
+.card{background:var(--card);border-color:var(--edge);border-radius:var(--r-lg);box-shadow:var(--shadow-card);backdrop-filter:blur(var(--blur)) saturate(1.4);-webkit-backdrop-filter:blur(var(--blur)) saturate(1.4)}
+.card.us{border-color:color-mix(in srgb,var(--accent) 55%,var(--edge))}
+
+/* floating tab bar */
+nav{background:var(--float);border-color:var(--hair);border-radius:var(--r-pill);box-shadow:var(--shadow-float);backdrop-filter:blur(var(--blur)) saturate(1.4);-webkit-backdrop-filter:blur(var(--blur)) saturate(1.4);padding:var(--s-1) var(--s-2)}
+nav button{border-radius:var(--r-pill)}
+
+/* controls are pills; the one main action uses the accent gradient */
+button{border-radius:var(--r-pill);border-color:var(--hair)}
+button.d,button.link{border-radius:var(--r-sm)}
+button.p,.composer.has button{background:var(--accent-fill);border-color:transparent;box-shadow:var(--glow)}
+button.p:hover,button.p:active,.composer.has button:hover,.composer.has button:active{background:var(--accent-fill);filter:brightness(1.07)}
+.chip{border-radius:var(--r-pill);border-color:var(--hair)}
+.chip.gn{border-color:var(--success)}.chip.rd{border-color:var(--danger)}.chip.me,.chip.on{border-color:var(--accent)}
+.seg{border-radius:var(--r-pill);background:var(--field)}
+.seg button{border-radius:var(--r-pill)}
+input,select,textarea{border-radius:var(--r-sm)}
+input,select,textarea{background:var(--field)}
+
+/* sheets, menus and dialogs are never see-through */
+#modal>div{background:var(--solid);border:1px solid var(--edge);border-radius:var(--r-xl);box-shadow:var(--shadow-pop)}
+#menu{background:var(--solid);border:1px solid var(--edge);border-radius:var(--r-md);box-shadow:var(--shadow-pop)}
+#dlg .dbox{background:var(--solid);border:1px solid var(--edge);border-radius:var(--r-xl);box-shadow:var(--shadow-pop)}
