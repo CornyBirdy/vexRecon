@@ -532,8 +532,8 @@ function vMatches() {
     const s = side(m), o = open[m.id];
     let res = '';
     if (s && scored(m)) { const a = s === 'red' ? m.rs : m.bs, b = s === 'red' ? m.bs : m.rs; res = a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }
-    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" data-act="mopen" data-id="${m.id}" role="button" aria-expanded="${!!o}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${m.rs}–${m.bs}</span>` : ''}${res}<span class="grow"></span>${s ? `<span class="tag ${s}">We’re ${s}</span>` : ''}<span class="chev ${o ? 'up' : ''}" aria-hidden="true">›</span></div>
-    <div class="vs"><div class="side r"><span>Red alliance</span>${chips(m, m.red)}</div><div class="side b"><span>Blue alliance</span>${chips(m, m.blue)}</div></div>
+    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" data-act="mopen" data-id="${m.id}" role="button" aria-expanded="${!!o}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${m.rs}–${m.bs}</span>` : ''}${res}<span class="grow"></span><span class="chev ${o ? 'up' : ''}" aria-hidden="true">›</span></div>
+    <div class="vs"><div class="side r ${s === 'red' ? 'mine' : ''}"><span>Red alliance</span>${chips(m, m.red)}</div><div class="side b ${s === 'blue' ? 'mine' : ''}"><span>Blue alliance</span>${chips(m, m.blue)}</div></div>
     ${o ? `<div class="mx ${justOpened === m.id ? 'reveal' : ''}">` + (s ? `<h3>Strategy</h3>${noteBox('match', m.id, 'strat', 'Our strategy for this match…')}<h3>Our alliance</h3>${noteBox('match', m.id, 'ally', 'What our partner said / their plan…')}<h3>Opposition</h3>${noteBox('match', m.id, 'opp', 'Weaknesses, tendencies…')}`
         : `<h3>Notes</h3>${noteBox('match', m.id, 'gen', 'What happened in this match…')}`) + `<div class="foot"><button class="d" data-act="clearmatch" data-id="${m.id}">Clear all notes for this match</button><button class="d" data-act="delmatch" data-id="${m.id}">Delete match</button></div></div>` : ''}</div>`
   }).join('') || empty(mf === 'all' ? 'No matches yet.' : 'No matches with us yet.');
@@ -590,9 +590,10 @@ function vScout() {
   const all = teams().filter(t => t.number !== US), mine = t => myScouts(t.number).length, left = all.filter(t => !mine(t)), show = sf === 'todo' ? left : all;
   return `<div class="scouthead"><span class="mut">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></span><span class="mut">${all.length - left.length} of ${all.length} done</span></div>
   ${segBar([['todo', 'To scout (' + left.length + ')'], ['all', 'All teams (' + all.length + ')']], sf, 'sfilter')}
+  <p class="mut legend"><span class="mtag g">Q</span> plays with us <span class="mtag r">Q</span> plays against us</p>
   <div class="card list">${show.map(t => {
     const r = rel(t.number), n = mine(t);
-    return `<div class="trow" data-act="startscout" data-t="${t.number}"><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div>${r.a.length || r.o.length ? `<div class="rels">${r.a.length ? `<span class="rel g">With us ${r.a.join(' ')}</span>` : ''}${r.o.length ? `<span class="rel r">Against ${r.o.join(' ')}</span>` : ''}</div>` : ''}</div>${n ? `<span class="tick" title="You’ve scouted this${n > 1 ? ' (' + n + ' entries)' : ''}">✓${n > 1 ? ' ' + n : ''}</span>` : ''}<span class="chev" aria-hidden="true">›</span></div>`
+    return `<div class="trow" data-act="startscout" data-t="${t.number}"><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div>${r.a.length || r.o.length ? `<div class="rels">${r.a.map(l => `<span class="mtag g" title="With us in ${esc(l)}" aria-label="With us in ${esc(l)}">${esc(l)}</span>`).join('')}${r.o.map(l => `<span class="mtag r" title="Against us in ${esc(l)}" aria-label="Against us in ${esc(l)}">${esc(l)}</span>`).join('')}</div>` : ''}</div>${n ? `<span class="tick" title="You’ve scouted this${n > 1 ? ' (' + n + ' entries)' : ''}">✓${n > 1 ? ' ' + n : ''}</span>` : ''}<span class="chev" aria-hidden="true">›</span></div>`
   }).join('') || empty(all.length ? 'You’ve scouted every team. Switch to All teams to edit an entry.' : 'Add teams first.')}</div>`;
 }
 function newDraft(t, matchId) {

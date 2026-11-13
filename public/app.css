@@ -66,9 +66,8 @@ nav:empty{display:none}nav svg{width:22px;height:22px;fill:none;stroke:currentCo
 .num{font:700 22px/1 var(--font);font-variant-numeric:tabular-nums;margin-right:6px}
 .note{border-top:1px solid var(--hairline);padding:10px 0;white-space:pre-wrap;word-break:break-word}.note small{color:var(--ink-muted);display:flex;align-items:center;gap:var(--s-2);margin-top:2px;white-space:normal}.note small .d{margin-left:auto}
 .mut{color:var(--ink-muted);font-size:13.5px}
-.tag{font-size:12px;padding:3px 10px;border-radius:var(--r-sm);font-weight:700;color:var(--on-alliance)}
-.tag.red{background:var(--alliance-red)}.tag.blue{background:var(--alliance-blue)}
 .vs{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2);margin-top:var(--s-2)}.vs .side{border-radius:var(--r-sm);padding:var(--s-2) 10px 6px}
+.vs .side.mine{box-shadow:0 0 0 2px var(--accent)}
 .vs .r{background:var(--alliance-red-soft);border-top:4px solid var(--alliance-red)}.vs .b{background:var(--alliance-blue-soft);border-top:4px solid var(--alliance-blue)}.vs .side>span{font-size:12px;font-weight:700;color:var(--ink-muted);display:block}
 
 /* 1–5 rating buttons: selected = accent-soft + accent-text + 2px underline */
@@ -97,7 +96,7 @@ nav:empty{display:none}nav svg{width:22px;height:22px;fill:none;stroke:currentCo
 .mhead{display:flex;align-items:center;gap:var(--s-2);cursor:pointer;-webkit-user-select:none;user-select:none}.mhead .num{margin:0}.grow{flex:1}
 .score{font:700 18px/1 var(--font);font-variant-numeric:tabular-nums;color:var(--ink-muted);white-space:nowrap}
 .res{font:700 13px/1 var(--font);padding:var(--s-1) 7px;border-radius:var(--r-xs);background:var(--surface-raised);color:var(--ink-muted)}.res.w{background:var(--success-soft);color:var(--success)}.res.l{background:var(--danger-soft);color:var(--danger)}
-.mhead .tag{flex:0 0 auto;white-space:nowrap}
+
 
 /* segmented switch: selected = accent-soft + accent-text + 2px underline; hover = surface-raised */
 .seg{display:flex;gap:var(--s-1);background:var(--surface-sunken);border:1px solid var(--hairline);border-radius:var(--r-md);padding:var(--s-1);margin:var(--s-3) 0}
@@ -143,7 +142,11 @@ input[type=search]{-webkit-appearance:none;appearance:none}
 
 /* scout tab: team list rows + compact form (label left, 1-5 right) */
 .scouthead{display:flex;justify-content:space-between;align-items:center;gap:var(--s-3);margin:var(--s-2) var(--s-1) 0}
-.rels{margin-top:2px}.rel{font-size:13px;font-weight:600;margin-right:var(--s-3)}.rel.g{color:var(--success)}.rel.r{color:var(--danger)}
+.rels{margin-top:var(--s-1);display:flex;flex-wrap:wrap;gap:var(--s-1)}
+/* match tags: green = plays with us, red = plays against us (same colours as the team chips on the Matches tab) */
+.mtag{display:inline-block;font:700 12px/1.3 var(--font);padding:2px 8px;border-radius:var(--r-sm);border:1.5px solid}
+.mtag.g{background:var(--success-soft);border-color:var(--success);color:var(--success)}.mtag.r{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+.legend{font-size:13px;margin:var(--s-1) var(--s-1) 0}.legend .mtag{margin:0 2px 0 var(--s-2)}.legend .mtag:first-child{margin-left:0}
 .tick{font-size:13px;font-weight:700;color:var(--accent-text);white-space:nowrap}
 
 /* login: show / hide the team code */

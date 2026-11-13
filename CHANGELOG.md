@@ -33,6 +33,9 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
   The stats load the first time an event is opened and again once they are 6 hours old; **Refresh** loads them now.
 
 ### Changed
+- **Colour instead of words on the Scout and Matches tabs.** The Scout list shows each team's matches as small coloured
+  tags (green = plays with us, red = plays against us, with a one-line key) instead of "With us Q13 / Against Q5". On
+  Matches the "We're red / We're blue" badge is gone; our alliance is outlined in the accent colour instead.
 - **The Event and Teams tabs are now one Event tab.** The event picker stays on top, then **Teams** (search, with rank,
   skills and OPR on each row), **Rankings**, **Skills** and **More** (event notes, import or add another event, event link,
   team settings, delete event).
