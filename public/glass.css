@@ -7,18 +7,18 @@ header{background:var(--glass);border-color:var(--edge);border-radius:var(--r-xl
 .card.us{border-color:color-mix(in srgb,var(--accent) 55%,var(--edge))}
 
 /* floating tab bar */
-nav{background:var(--float);border-color:var(--hair);border-radius:var(--r-pill);box-shadow:var(--shadow-float);backdrop-filter:blur(var(--blur)) saturate(1.4);-webkit-backdrop-filter:blur(var(--blur)) saturate(1.4);padding:var(--s-1) var(--s-2)}
-nav button{border-radius:var(--r-pill)}
+nav{background:var(--float);border-color:var(--hair);border-radius:var(--r-lg);box-shadow:var(--shadow-float);backdrop-filter:blur(var(--blur)) saturate(1.4);-webkit-backdrop-filter:blur(var(--blur)) saturate(1.4);padding:var(--s-1) var(--s-2)}
+nav button{border-radius:var(--r-md)}
 
 /* controls are pills; the one main action uses the accent gradient */
-button{border-radius:var(--r-pill);border-color:var(--hair)}
+button{border-radius:var(--r-btn);border-color:var(--hair)}
 button.d,button.link{border-radius:var(--r-sm)}
 button.p,.composer.has button{background:var(--accent-fill);border-color:transparent;box-shadow:var(--glow)}
 button.p:hover,button.p:active,.composer.has button:hover,.composer.has button:active{background:var(--accent-fill);filter:brightness(1.07)}
-.chip{border-radius:var(--r-pill);border-color:var(--hair)}
+.chip{border-radius:var(--r-sm);border-color:var(--hair)}
 .chip.gn{border-color:var(--success)}.chip.rd{border-color:var(--danger)}.chip.me,.chip.on{border-color:var(--accent)}
-.seg{border-radius:var(--r-pill);background:var(--field)}
-.seg button{border-radius:var(--r-pill)}
+.seg{border-radius:var(--r-md);background:var(--field)}
+.seg button{border-radius:var(--r-sm)}
 input,select,textarea{border-radius:var(--r-sm)}
 input,select,textarea{background:var(--field)}
 
@@ -39,7 +39,7 @@ h1{font:600 28px/1.1 var(--font);letter-spacing:-.025em;margin:0}
 .hbig{font:300 68px/1 var(--font);letter-spacing:-.045em;font-variant-numeric:tabular-nums;margin:var(--s-2) 0 var(--s-4)}
 .hbig small{font-size:20px;color:var(--ink-muted);font-weight:400;margin-left:8px;letter-spacing:0}
 .hrow{display:flex;gap:var(--s-2);flex-wrap:wrap}
-.hchip{padding:7px 15px;border-radius:var(--r-pill);background:var(--field);border:1px solid var(--hair);font:600 13px var(--font);font-variant-numeric:tabular-nums}
+.hchip{padding:7px 14px;border-radius:var(--r-sm);background:var(--field);border:1px solid var(--hair);font:600 13px var(--font);font-variant-numeric:tabular-nums}
 .hnote{margin:0;color:var(--ink-muted)}
 .hrecent{display:flex;align-items:center;gap:6px;margin-top:var(--s-4)}.hrecent>span:first-child{font-size:12.5px;color:var(--ink-muted);font-weight:600;margin-right:4px}
 
@@ -61,7 +61,7 @@ h1{font:600 28px/1.1 var(--font);letter-spacing:-.025em;margin:0}
 .card.us{box-shadow:var(--shadow-card)}
 .mhead .num{font:600 21px/1 var(--font)}
 .score{font:500 18px/1 var(--mono);color:var(--ink)}
-.res{border-radius:var(--r-pill);padding:5px 11px}
+.res{border-radius:var(--r-sm);padding:5px 11px}
 .vs .side{border-radius:var(--r-md)}
 .tile{background:var(--field);border:1px solid var(--edge);border-radius:var(--r-md);padding:var(--s-3) var(--s-4)}
 .tile b{font:300 32px/1.1 var(--font);letter-spacing:-.025em}
@@ -71,3 +71,11 @@ h1{font:600 28px/1.1 var(--font);letter-spacing:-.025em;margin:0}
 .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 4px 14px -6px var(--shadow-c)}
 nav button.on{box-shadow:none;background:var(--a-soft);color:var(--accent-text)}
 @media(min-width:860px){.home{grid-template-columns:1.1fr 1fr;align-items:start}.greet{grid-column:1/-1}.qa{grid-column:1/-1}}
+
+/* Matches and Scout use the same hero */
+.homehero + .seg { margin-top: var(--s-3); }
+.scouthero { margin: var(--s-2) 0 var(--s-3); }
+.scouthero .hbig { margin-bottom: var(--s-3); }
+.sbar { height: 8px; border-radius: var(--r-xs); background: var(--surface-track); overflow: hidden; }
+.sbar > i { display: block; height: 100%; border-radius: var(--r-xs); background: var(--accent-fill); }
+.hero-pad { padding: 0; }

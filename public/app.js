@@ -551,7 +551,10 @@ const chips = (m, arr) => arr.map(n => `<button class="chip ${n === US ? 'me' : 
 function vMatches() {
   if (!evObj()) return empty('Pick an event first.');
   const all = matches(), list = mf === 'all' ? all : all.filter(m => side(m));
-  let h = segBar([['ours', 'Our matches'], ['all', 'All matches']], mf, 'mfilter');
+  const st = stats(), me = st.by.get(US), playedN = all.filter(m => side(m) && scored(m)).length;
+  const rankChip = me && me.rank != null ? `<span class="hchip">Rank ${me.rank} of ${teams().length}</span>` : '';
+  let h = `<div class="homehero"><span class="hl">Our record</span>${me && (me.w + me.l + me.t) ? `<div class="hbig">${me.w}<small>– ${me.l} – ${me.t}</small></div><div class="hrow">${rankChip}${me.opr != null ? `<span class="hchip">OPR ${f1(me.opr)}</span>` : ''}</div>` : `<div class="hbig">–</div><p class="hnote">${playedN ? playedN + ' of our matches played.' : 'Your record shows up once qualification matches are scored.'}</p>`}</div>` +
+    segBar([['ours', 'Our matches'], ['all', 'All matches']], mf, 'mfilter');
   h += list.map(m => {
     const s = side(m), o = open[m.id], ours = mf !== 'all' && !!s; // Our matches: our alliance is always the left column, and the score reads us–them
     const sides = [['r', 'Red alliance', m.red, 'red'], ['b', 'Blue alliance', m.blue, 'blue']]; if (ours && s === 'blue') sides.reverse();
@@ -613,7 +616,9 @@ function vScout() {
   }
   const rel = n => { const a = [], o = []; ms.forEach(x => { const s = side(x, n); if (n === US || !s) return; (s === 'ally' ? a : o).push(x.label.replace(/^Mock /, '')) }); return { a, o } };
   const all = teams().filter(t => t.number !== US), mine = t => myScouts(t.number).length, left = all.filter(t => !mine(t)), show = sf === 'todo' ? left : all;
-  return `<div class="scouthead"><span class="mut">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></span><span class="mut">${all.length - left.length} of ${all.length} done</span></div>
+  const doneN = all.length - left.length;
+  return `<div class="homehero scouthero"><span class="hl">Teams scouted</span><div class="hbig">${doneN}<small>of ${all.length}</small></div><div class="sbar" role="progressbar" aria-valuenow="${doneN}" aria-valuemin="0" aria-valuemax="${all.length}"><i style="width:${all.length ? Math.round(100 * doneN / all.length) : 0}%"></i></div></div>
+  <div class="scouthead"><span class="mut">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></span><span class="mut">${all.length - left.length} of ${all.length} done</span></div>
   ${segBar([['todo', 'To scout (' + left.length + ')'], ['all', 'All teams (' + all.length + ')']], sf, 'sfilter')}
   <p class="mut legend"><span class="mtag g">Q</span> plays with us <span class="mtag r">Q</span> plays against us</p>
   <div class="card list">${show.map(t => {
