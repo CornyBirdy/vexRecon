@@ -318,7 +318,10 @@ function flipPlay(m) {
   if (reduced()) return;
   document.querySelectorAll('#app [data-flip]').forEach(e => { const t = m.get(e.dataset.flip); if (t == null) return; const dy = t - e.getBoundingClientRect().top; if (Math.abs(dy) > 1) e.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)' }) });
 }
-function replay(el, c) { if (el.id === 'app') ['enter', 'enter-fwd', 'enter-back', 'enter-up'].forEach(k => el.classList.remove(k)); el.classList.remove(c); void el.offsetWidth; el.classList.add(c) }
+let enterT;
+const ENTER = ['enter', 'enter-fwd', 'enter-back', 'enter-up'];
+// the enter class is dropped once the page has arrived, so later redraws (a new note, a sync) don't replay it
+function replay(el, c) { if (el.id === 'app') { ENTER.forEach(k => el.classList.remove(k)); clearTimeout(enterT); enterT = setTimeout(() => ENTER.forEach(k => el.classList.remove(k)), 1000) } el.classList.remove(c); void el.offsetWidth; el.classList.add(c) }
 let navAnim = '';
 const lastCounts = {};
 function countUp() {
@@ -332,26 +335,50 @@ function countUp() {
 function flash(el) { if (!el || reduced()) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash') }
 const fresh = n => seenNotes && !seenNotes.has(n.id) ? 'fresh' : '';
 
+// Segmented controls: one highlight that glides to the chosen item, and the content under it slides the way you went.
+const SEG_SLIDE = new Set(['mfilter', 'sfilter', 'tview', 'sksope', 'ebscope', 'wmode']);
+const segBtns = s => [...s.querySelectorAll(':scope > button')];
+function segSnap() {
+  const m = {};
+  document.querySelectorAll('#app .seg[data-seg]').forEach(s => { const bs = segBtns(s), i = bs.findIndex(b => b.classList.contains('on')); if (i >= 0 && bs[i].offsetWidth) m[s.dataset.seg] = { i, l: bs[i].offsetLeft, w: bs[i].offsetWidth } });
+  return m;
+}
+function segPlace(snap) {
+  document.querySelectorAll('#app .seg[data-seg]').forEach(s => {
+    const bs = segBtns(s), i = bs.findIndex(b => b.classList.contains('on')), b = bs[i];
+    if (!b || !b.offsetWidth) return; // folded away: placed when it opens
+    let p = s.querySelector(':scope > .segpill'); if (!p) { p = document.createElement('i'); p.className = 'segpill'; s.appendChild(p) }
+    const l = b.offsetLeft, w = b.offsetWidth; p.style.width = w + 'px'; p.style.transform = `translateX(${l}px)`; s.classList.add('pilled');
+    const from = snap && snap[s.dataset.seg]; if (!from || from.i === i || reduced()) return;
+    p.animate([{ width: from.w + 'px', transform: `translateX(${from.l}px)` }, { width: w + 'px', transform: `translateX(${l}px)` }], { duration: 440, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)' });
+    if (!SEG_SLIDE.has(s.dataset.seg)) return;
+    const dir = i > from.i ? 1 : -1; let n = s.nextElementSibling, k = 0;
+    while (n) { n.animate([{ opacity: 0, transform: `translateX(${dir * 36}px)` }, { opacity: 1, transform: 'none' }], { duration: 380, delay: Math.min(k, 5) * 40, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'backwards' }); n = n.nextElementSibling; k++ }
+  });
+}
+window.addEventListener('resize', () => segPlace());
 function render() {
   if (dragging) { dirty = true; return }
   document.body.classList.toggle('out', !code);
-  if (!code) { $('#nav').innerHTML = ''; $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Welcome'; lastView = ''; return }
+  if (!code) { $('#nav').innerHTML = ''; const sb = segSnap(); $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Welcome'; $('#evbar').innerHTML = ''; if (sb.wmode) $('#app .welcome')?.classList.add('swap'); segPlace(sb); lastView = ''; return }
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) || menuFor) { dirty = true; return }
   dirty = false;
   US = norm(team);
   NAMES = Array.isArray(cfg().names) ? cfg().names : [];
   if (loaded && name && !NAMES.includes(name)) { name = ''; ls('name', '') }
-  $('#evname').textContent = [US + (teamInfo.name ? ' ' + teamInfo.name : ''), evObj() ? evObj().name : ''].filter(Boolean).join(' · ');
+  $('#evname').textContent = US + (teamInfo.name ? ' · ' + teamInfo.name : '');
+  $('#evbar').innerHTML = evBar();
   // the tab bar is built once and only its classes change, so the selected tab can ease across
   const nav = $('#nav');
   if (!nav.children.length) nav.innerHTML = TABS.map(t => `<button data-act="tab" data-v="${t[0]}">${t[1]}<span>${t[2]}</span></button>`).join('');
   nav.querySelectorAll('button').forEach(b => { const on = b.dataset.v === tab; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false') });
   let pill = nav.querySelector('.navpill'); if (!pill) { pill = document.createElement('i'); pill.className = 'navpill'; nav.prepend(pill) }
   const onb = nav.querySelector('button.on'); if (onb) { pill.style.width = onb.offsetWidth + 'px'; pill.style.transform = `translateX(${onb.offsetLeft}px)`; pill.style.opacity = 1 }
-  const key = viewKey(), same = key === lastView, before = same ? flipCapture() : null, y = scrollY;
+  const key = viewKey(), same = key === lastView, before = same ? flipCapture() : null, y = scrollY, sb = segSnap();
   $('#app').innerHTML = ({ event: vEvent, matches: vMatches, scout: vScout, pick: vPick })[tab]();
   scrollTo({ top: same ? y : 0, behavior: 'instant' });
-  if (same) flipPlay(before); else if (lastView && !reduced()) replay($('#app'), 'enter' + (navAnim ? '-' + navAnim : '')); navAnim = '';
+  if (same) flipPlay(before); else if (lastView && !reduced() && navAnim !== 'seg') replay($('#app'), 'enter' + (navAnim ? '-' + navAnim : '')); navAnim = '';
+  segPlace(sb);
   if (!same) for (const k in lastCounts) delete lastCounts[k];
   lastView = key; justOpened = null; countUp();
   const md = $('#modal');
@@ -377,7 +404,7 @@ document.addEventListener('toggle', e => {
   const d = e.target; if (d.tagName !== 'DETAILS' || !d.id) return;
   const was = d.id in dState ? dState[d.id] : null; dState[d.id] = d.open;
   if (d.open && was !== true && performance.now() - renderedAt > 60 && !reduced()) replay(d, 'reveal');
-  if (d.open) ebKick();
+  if (d.open) { ebKick(); segPlace() }
 }, true);
 
 // Note boxes: one line until you tap in; "Add" lights up once there's text. Half-typed notes survive re-renders.
@@ -392,6 +419,14 @@ const noteRow = n => `<div class="note ${fresh(n)}"><div class="ntext">${esc(n.t
 const nameChips = () => NAMES.map(n => `<button class="chip ${name === n ? 'on' : ''}" data-act="setname" data-v="${esc(n)}" aria-pressed="${name === n}">${esc(n)}</button>`).join('');
 const empty = msg => `<p class="mut empty">${msg}</p>`;
 
+const IC_REFRESH = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.5-4.2L4 8.5M4 4v4.5h4.5M4 13a8 8 0 0 0 14.5 4.2l1.5-1.7M20 20v-4.5h-4.5"/></svg>';
+const IC_OUT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>';
+// the event picker lives in the header so it is there on every tab; Update and Event page sit beside it
+function evBar() {
+  if (!S.events.length) return '';
+  const e = evObj(), sku = skuOf(e);
+  return `<div class="evpick">${evSelect()}${sku ? `<button type="button" class="ib" data-act="reimport" aria-label="Update this event from VEX Events" title="Update from VEX Events">${IC_REFRESH}</button>` : ''}${e && e.link ? `<a class="ib" href="${esc(e.link)}" target="_blank" rel="noopener" aria-label="Open the event page" title="Event page">${IC_OUT}</a>` : ''}</div><p class="mut evmsg" id="impmsg2" role="status"></p>`;
+}
 const evSelect = () => dd('evsel', ev, [['', '— choose event —'], ...S.events.map(x => [x.id, x.name]), ['+add', '＋ Add another event…']], { label: 'Event' });
 // install: Android / desktop Chrome offer a prompt we can trigger; iPhone needs Share → Add to Home Screen
 let installEvt = null;
@@ -424,27 +459,26 @@ function vAbout() {
 }
 
 // ---------- Event tab: one place for the event, its teams, rankings, skills and notes ----------
-const segBar = (items, cur, act) => `<div class="seg" role="group">${items.map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" aria-pressed="${cur === k}" data-act="${act}" data-v="${k}">${l}</button>`).join('')}</div>`;
+const segBar = (items, cur, act) => `<div class="seg" role="group" data-seg="${act}">${items.map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" aria-pressed="${cur === k}" data-act="${act}" data-v="${k}">${l}</button>`).join('')}</div>`;
 const tlist = () => '';
 const tiles = a => `<div class="tiles">${a.map(([v, l, sub]) => `<div class="tile"><b>${v}</b><span>${l}</span>${sub ? `<small>${sub}</small>` : ''}</div>`).join('')}</div>`;
 
-// What's happening now: live / starts in N days / ended, plus how far off our next match is.
-function evStatus(e, next, away, played) {
+// What's happening now: live (and which day), starts in N days, or ended. Our next match has its own card, so it isn't repeated here.
+function evStatus(e, started, hasNext, played) {
   const today = new Date(new Date().toDateString() + ' 12:00:00');
-  const day = d => d ? Math.round((new Date(String(d).slice(0, 10) + 'T12:00:00') - today) / 864e5) : null;
+  const at = d => new Date(String(d).slice(0, 10) + 'T12:00:00'), day = d => d ? Math.round((at(d) - today) / 864e5) : null;
   const ds = day(e.start), de = day(e.end || e.start);
-  const nx = next ? `${esc(next.label)} ${away <= 0 ? 'is up next' : 'in ' + away + (away === 1 ? ' match' : ' matches')}` : '';
-  if (ds != null && ds > 0) return { cls: 'soon', html: `Starts ${ds === 1 ? 'tomorrow' : 'in ' + ds + ' days'}${nx ? ' · ' + nx : ''}` };
-  if (ds != null && de >= 0) return { cls: 'now', html: `<span class="livedot"></span>Live now${nx ? ' · ' + nx : ''}` };
+  if (ds != null && ds > 0) return { cls: 'soon', html: `Starts ${ds === 1 ? 'tomorrow' : 'in ' + ds + ' days'} · ${at(e.start).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}` };
+  if (ds != null && de >= 0) return { cls: 'now', html: `<span class="livedot"></span>Live now${de > ds ? ` · Day ${1 - ds} of ${de - ds + 1}` : ''}` };
   if (ds != null) return { cls: 'done', html: `Ended ${de === 0 ? 'today' : -de + (de === -1 ? ' day' : ' days') + ' ago'}` };
-  return nx ? { cls: 'now', html: `<span class="livedot"></span>${nx}` } : { cls: 'soon', html: played ? 'All our matches are played' : 'Waiting for the match schedule' };
+  return started && hasNext ? { cls: 'now', html: '<span class="livedot"></span>Event in progress' } : { cls: 'soon', html: played ? 'All our matches are played' : hasNext ? 'Matches are scheduled' : 'Waiting for the match schedule' };
 }
-// Home: a status line, our rank as the big number, the next match we play, and one-tap shortcuts.
+// Home: a status line, our rank as the big number and the next match we play (the tab bar does the navigating).
 function vHome() {
   const e = evObj(); if (!e) return '';
   const st = stats(), me = st.by.get(US), ts = teams(), all = matches();
   const ours = all.filter(m => side(m)), next = ours.find(m => !scored(m));
-  const away = next ? all.filter(m => !scored(m)).indexOf(next) : -1, stat = evStatus(e, next, away, ours.filter(scored).length);
+  const away = next ? all.filter(m => !scored(m)).indexOf(next) : -1, stat = evStatus(e, all.some(scored), !!next, ours.length && ours.every(scored));
   const recent = ours.filter(scored).slice(-5).map(m => { const s = side(m), a = s === 'red' ? m.rs : m.bs, b = s === 'red' ? m.bs : m.rs; return a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }).join('');
   const hero = me && me.rank != null
     ? `<div class="hbig"><span data-count="${me.rank}" data-ck="rank">${me.rank}</span><small>of ${ts.length}</small></div><div class="hrow"><span class="hchip">${rec(me)}</span>${me.opr != null ? `<span class="hchip">OPR ${f1(me.opr)}</span>` : ''}${me.ccwm != null ? `<span class="hchip">CCWM ${sgn(me.ccwm)}</span>` : ''}</div>`
@@ -455,20 +489,17 @@ function vHome() {
     nx = `<div class="card next tap" data-act="gomatch" data-id="${esc(next.id)}" role="button" tabindex="0" aria-label="Open ${esc(next.label)}"><div class="nhead"><h2>Next match</h2><span class="chip warn">${esc(next.label)} · ${away <= 0 ? 'up next' : 'in ' + away + (away === 1 ? ' match' : ' matches')}</span></div>
     <div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${s === col ? 'mine' : ''}"><span>${l}</span>${chips(next, arr)}</div>`).join('')}</div></div>`;
   }
-  const qa = (t, label) => `<button data-act="tab" data-v="${t}">${TABS.find(x => x[0] === t)[1]}<span>${label}</span></button>`;
   return `<div class="home"><div class="greet"><div><p class="live ${stat.cls}">${stat.html}</p><h1>${esc(name || US)}${name ? ' <button class="link namechg" data-act="setname" data-v="">Change</button>' : ''}</h1></div></div>
   <div class="homehero tap" data-act="gorank" role="button" tabindex="0" aria-label="Open the rankings"><span class="hl">Our rank${st.official ? '' : ' (calculated)'}</span>${hero}${recent ? `<div class="hrecent"><span>Recent</span>${recent}</div>` : ''}</div>
-  ${nx}<div class="qa">${qa('scout', 'Scout a team')}${qa('matches', 'Matches')}${qa('pick', 'Picklist')}</div></div>`;
+  ${nx}</div>`;
 }
 
 function vEvent() {
-  const e = evObj(), sku = skuOf(e);
+  const e = evObj();
   let h = name ? '' : whoCard('Who are you?', 'Your name goes on your notes and scouting.');
   if (e) h += vHome();
   const me = name ? `<p class="mut meta">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></p>` : '';
-  if (!e) return h + `<div class="card"><h2>Pick your event</h2>${me}${S.events.length ? evSelect() : ''}<h3>Find your event</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${ebHTML()}<h3>Or paste an event code or link</h3>${importForm('')}<h3>Or create one by hand</h3>${manualForm()}</div>` + settingsCard();
-  h += `<div class="card">${evSelect()}
-    <p class="mut meta">${sku ? 'From VEX Events · ' + esc(sku) + ' · <button class="link" data-act="reimport">Update now</button>' : 'Created by hand'}${e.link ? ` · <a href="${esc(e.link)}" target="_blank" rel="noopener">Event page ↗</a>` : ''} <span id="impmsg2"></span></p></div>`;
+  if (!e) return h + `<div class="card"><h2>Pick your event</h2>${me}${S.events.length ? '<p class="mut">Choose one of your events from the bar at the top, or add another here.</p>' : ''}<h3>Find your event</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${ebHTML()}<h3>Or paste an event code or link</h3>${importForm('')}<h3>Or create one by hand</h3>${manualForm()}</div>` + settingsCard();
   h += segBar([['list', 'Teams'], ['rank', 'Rankings'], ['skills', 'Skills'], ['more', 'More']], tv, 'tview');
   return h + ({ list: vTeamList, rank: vRank, skills: vSkills, more: vMore })[tv]();
 }
@@ -942,11 +973,11 @@ document.addEventListener('click', e => {
   }
   else if (a === 'delmatch') { if (sure(b)) del('matches', b.dataset.id) }
   else if (a === 'mopen') { const id = b.dataset.id; open[id] = !open[id]; justOpened = open[id] ? id : null; render() }
-  else if (a === 'sfilter') { sf = b.dataset.v; ls('sf', sf); navAnim = 'up'; render() }
-  else if (a === 'mfilter') { mf = b.dataset.v; ls('mf', mf); navAnim = 'up'; render() }
+  else if (a === 'sfilter') { sf = b.dataset.v; ls('sf', sf); navAnim = 'seg'; render() }
+  else if (a === 'mfilter') { mf = b.dataset.v; ls('mf', mf); navAnim = 'seg'; render() }
   else if (a === 'gorank') { tab = 'event'; ls('tab', tab); tv = 'rank'; ls('tv', tv); navAnim = 'fwd'; render(); const r = document.querySelector('#app tr.us'); if (r) setTimeout(() => { r.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); flash(r) }, 120) }
   else if (a === 'gomatch') { const id = b.dataset.id; tab = 'matches'; ls('tab', tab); mf = 'ours'; ls('mf', mf); open[id] = true; justOpened = id; navAnim = 'fwd'; render(); const c = document.querySelector(`#app [data-act="mopen"][data-id="${id}"]`); if (c) setTimeout(() => { c.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); flash(c.closest('.card')) }, 120) }
-  else if (a === 'tview') { tv = b.dataset.v; ls('tv', tv); navAnim = 'up'; render() }
+  else if (a === 'tview') { tv = b.dataset.v; ls('tv', tv); navAnim = 'seg'; render() }
   else if (a === 'rksort') { rks = b.dataset.v; ls('rks', rks); render() }
   else if (a === 'sksope') { sks = b.dataset.v; ls('sks', sks); render() }
   else if (a === 'sksort') { sko = b.dataset.v; ls('sko', sko); render() }
@@ -992,18 +1023,29 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('focusout', () => setTimeout(() => { if (dirty) render() }, 150));
 
+// Picklist drag: the row follows your finger and the others slide aside live to open the gap where it would land.
 document.addEventListener('pointerdown', e => {
   const g = e.target.closest('.grip'); if (!g) return; e.preventDefault();
   const row = g.closest('.pk'), rows = [...document.querySelectorAll('#pklist .pk')], from = +row.dataset.i, y0 = e.clientY;
-  const mids = rows.map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2 });
-  dragging = true; row.classList.add('drag'); try { g.setPointerCapture(e.pointerId) } catch (_) {}
-  const mv = m => { row.style.transform = 'translateY(' + (m.clientY - y0) + 'px)' };
+  const rc = rows.map(r => r.getBoundingClientRect()), mids = rc.map(b => b.top + b.height / 2), gap = rows.length > 1 ? rc[1].top - rc[0].bottom : 0;
+  // how far each row has to travel for the dragged one to sit at index `to`
+  const slots = to => { const order = rows.map((_, i) => i).filter(i => i !== from); order.splice(to, 0, from); const o = []; let y = rc[0].top; order.forEach(i => { o[i] = y - rc[i].top; y += rc[i].height + gap }); return o };
+  const idx = y => { let to = 0; mids.forEach((m, i) => { if (i !== from && m < y) to++ }); return to };
+  let cur = from; dragging = true; row.classList.add('drag'); rows.forEach((r, i) => { if (i !== from) r.classList.add('shift') });
+  try { g.setPointerCapture(e.pointerId) } catch (_) {}
+  const shift = to => { const o = slots(to); rows.forEach((r, i) => { if (i !== from) r.style.transform = o[i] ? `translateY(${o[i]}px)` : '' }) };
+  const mv = m => { const dy = m.clientY - y0; row.style.transform = `translateY(${dy}px) scale(1.02)`; const to = idx(mids[from] + dy); if (to !== cur) { cur = to; shift(to); if (navigator.vibrate) try { navigator.vibrate(6) } catch (_) {} } };
   const up = u => {
     g.removeEventListener('pointermove', mv); g.removeEventListener('pointerup', up); g.removeEventListener('pointercancel', up);
-    dragging = false; row.classList.remove('drag'); row.style.transform = '';
-    const y = mids[from] + (u.clientY - y0); let to = 0; mids.forEach((m, i) => { if (i !== from && m < y) to++ });
-    if (u.type !== 'pointercancel' && to !== from) { const p = [...evObj().picks]; p.splice(to, 0, p.splice(from, 1)[0]); setPicks(p) }
-    if (dirty) render()
+    const to = u.type === 'pointercancel' ? from : idx(mids[from] + (u.clientY - y0)), o = slots(to);
+    shift(to); row.classList.add('settle'); row.style.transform = `translateY(${o[from]}px)`; // the dragged row glides into its slot
+    // everything already sits where the new order puts it, so the redraw after the save doesn't move anything again
+    setTimeout(() => {
+      dragging = false;
+      if (to !== from) { const p = [...evObj().picks]; p.splice(to, 0, p.splice(from, 1)[0]); setPicks(p) }
+      else rows.forEach(r => { r.classList.remove('drag', 'shift', 'settle'); r.style.transform = '' });
+      if (dirty) render()
+    }, reduced() ? 0 : 210);
   };
   g.addEventListener('pointermove', mv); g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up)
 });

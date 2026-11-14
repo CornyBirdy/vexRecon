@@ -9,8 +9,8 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ### Added
 - **Event finder filters and a faster finder.** Under the search box you can now narrow events by **region**, **level** and **date** (next 7 / 30 days, this month, or last 7 / 30 days on the Earlier tab), and **Hide added** hides events already in Recon. Event lists are now remembered for 10 minutes, so switching between Our events, Coming up and Earlier is instant, and searching a list you already loaded no longer asks the server again. While it loads you see a spinner and placeholder rows.
 - **Remove a scout.** Team settings now lists the team's scouts with a **Remove** button (tap twice to confirm), and an **Add a scout** box. Their saved notes stay.
-- **Home tells you what's happening.** The greeting is now a status line: **Live now · Q5 in 4 matches**, **Starts in 3 days**, or **Ended 2 days ago**. **Change** (the scout name) is next to your name at the top. The rank card jumps to the Rankings tab and highlights your team, and the next-match card jumps to that match.
-- **A new Home on the Event tab.** The Event tab now opens on a greeting, your team's rank as one big number (with your record, OPR and CCWM, and how your last few matches went), the next match you play with your alliance on the left, and one-tap shortcuts to Scout, Matches and the Picklist. Team rows are now soft tiles with the team number as a badge, match scores are bigger, and the selected tab and switch buttons are raised pills.
+- **Home tells you what's happening.** The greeting is now a status line: **Live now · Day 2 of 3**, **Starts in 3 days · Sat 15 Nov**, or **Ended 2 days ago**. (Your next match has its own card, so it isn't repeated in the status.) **Change** (the scout name) is next to your name at the top. The rank card jumps to the Rankings tab and highlights your team, and the next-match card jumps to that match.
+- **A new Home on the Event tab.** The Event tab now opens on a greeting, your team's rank as one big number (with your record, OPR and CCWM, and how your last few matches went), the next match you play with your alliance on the left. Team rows are now soft tiles with the team number as a badge, match scores are bigger, and the selected tab and switch buttons are raised pills.
 - **Event browser.** You no longer need an event link to add an event. On the Event tab, the event picker's last option
   (**＋ Add another event…**), **More → Add another event** and the first-time "Pick your event" screen now have **Find an
   event**: **Our events** (everything your team is signed up for this season), **Coming up** (the next two months) and
@@ -37,6 +37,9 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
   The stats load the first time an event is opened and again once they are 6 hours old; **Refresh** loads them now.
 
 ### Changed
+- **The event picker moved up into the header.** It is on every tab now, with **Update** and **Event page** buttons beside it, and the team line under the wordmark is one short line. A long event name is cut off with "…" instead of running over the logo, on phones as well as desktop. The event card on the Event tab and the three shortcut tiles on Home are gone (the tab bar does that).
+- **Toggles now move with you.** Switching **Our matches / All matches**, **To scout / All teams**, **Teams / Rankings / Skills / More**, **Season best / This event** and the finder's **Our events / Coming up / Earlier** glides the highlight across and slides the list under it in the direction you went (to the right item, the list comes in from the right), instead of fading the whole page. The Join / Set up switch on the welcome screen does the same without replaying the logo.
+- **Picklist dragging is live.** While you drag a team by its ≡ handle the other teams slide out of the way to open the gap where it will land, the dragged row lifts, and on drop it settles into place with no second jump.
 - **Smoother, more specific animations.** Pages now slide the way you are going (forward to the right, back to the left), lists arrive one row after another, the selected tab's highlight glides between tabs, the big numbers count up, and tapping a card gives a press effect. Everything is switched off if your device asks for reduced motion.
 - **Better welcome screen.** One brand bar instead of two, a glowing icon, and the sign-in card in glass.
 - **Recon now follows your phone's light/dark setting** until you press the sun/moon button (it used to start in light). This also fixes dark logos on a dark page in browsers that force dark mode.
@@ -59,6 +62,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
   left out. The averages are shown as labelled tiles.
 
 ### Fixed
+- The page's entrance animation no longer replays on every redraw (a new note or a sync used to make the team list's rows re-appear).
 - **Importing newer event codes.** Codes like `VE-V5-26-66510` (not just `RE-V5RC-26-5068`) are now accepted, and you
   can paste the whole event page link (even with `#general-info` on the end); the code is picked out of it. If there's
   no code in what you typed, the box now says so.

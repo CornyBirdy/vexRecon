@@ -44,10 +44,6 @@ h1{font:600 28px/1.1 var(--font);letter-spacing:-.025em;margin:0}
 .hrecent{display:flex;align-items:center;gap:6px;margin-top:var(--s-4)}.hrecent>span:first-child{font-size:12.5px;color:var(--ink-muted);font-weight:600;margin-right:4px}
 
 .card.next{margin:0}.nhead{display:flex;justify-content:space-between;align-items:center;gap:var(--s-2);margin-bottom:var(--s-1)}.nhead h2{margin:0}
-.qa{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s-2)}
-.qa button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;height:auto;padding:var(--s-4) var(--s-2);border-radius:var(--r-lg);background:var(--card);border-color:var(--edge);box-shadow:var(--shadow-card);font-size:13px}
-.qa button:hover{background:var(--card);transform:translateY(-1px)}
-.qa svg{width:26px;height:26px;fill:none;stroke:var(--accent-text);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
 /* lists become rows of soft tiles, the team number as a badge */
 .card.list{padding:var(--s-2)}
@@ -70,7 +66,7 @@ h1{font:600 28px/1.1 var(--font);letter-spacing:-.025em;margin:0}
 .seg{padding:4px}
 .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 4px 14px -6px var(--shadow-c)}
 nav button.on{box-shadow:none;background:var(--a-soft);color:var(--accent-text)}
-@media(min-width:860px){.home{grid-template-columns:1.1fr 1fr;align-items:start}.greet{grid-column:1/-1}.qa{grid-column:1/-1}}
+@media(min-width:860px){.home{grid-template-columns:1.1fr 1fr;align-items:start}.greet{grid-column:1/-1}}
 
 /* Matches and Scout use the same hero */
 .homehero + .seg { margin-top: var(--s-3); }
@@ -148,7 +144,33 @@ nav button.on svg { transform: translateY(-2px) scale(1.08); }
 /* the team sheet springs up */
 @keyframes sheetSpring { from { opacity: 0; transform: translateY(56px) scale(.97); } to { opacity: 1; transform: none; } }
 #modal.opening > div { animation: sheetSpring .46s var(--spring) both; }
+/* header: wordmark and team on top, the event picker underneath, so a long event name can never run into the logo */
+header { flex-wrap: wrap; row-gap: var(--s-3); }
+.brand { flex: 1 1 0; }
+#evname { display: block; margin-top: 2px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; -webkit-line-clamp: unset; line-clamp: unset; overflow-wrap: normal; }
+.evbar { flex: 1 0 100%; min-width: 0; }
+.evbar:empty { display: none; }
+.evpick { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.evpick .sel { flex: 1 1 0; min-width: 0; width: auto; margin: 0; font-weight: 600; }
+.ib { flex: none; display: grid; place-items: center; width: var(--control-h); height: var(--control-h); padding: 0; border-radius: var(--r-btn); background: var(--field); border: 1px solid var(--hair); color: var(--ink); text-decoration: none; }
+.ib svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.ib:hover { background: var(--card); }
+.evmsg { margin: var(--s-2) 0 0; font-size: 13px; } .evmsg:empty { display: none; }
+body.out .evbar { display: none; }
+
+/* segmented controls: one raised highlight that glides between the items */
+.seg { position: relative; }
+.seg button { position: relative; z-index: 1; }
+.segpill { position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: var(--r-sm); background: var(--card); box-shadow: 0 4px 14px -6px var(--shadow-c); pointer-events: none; }
+.seg.pilled button.on { background: transparent; box-shadow: none; }
+.welcome.swap .hero *, .welcome.swap > .seg, .welcome.swap > .card { animation: none !important; }
+
+/* picklist: the other rows slide aside while you drag */
+.pk.shift { transition: transform .26s var(--spring); }
+.pk.drag { transition: none; will-change: transform; background: var(--solid); border-radius: var(--r-md); box-shadow: var(--shadow-window); }
+.pk.drag.settle { transition: transform .2s var(--ease), box-shadow .2s; }
 @media (prefers-reduced-motion: reduce) {
+  .pk.shift, .pk.drag.settle { transition: none; }
   #app.enter-fwd, #app.enter-back, #app.enter-up, #app.enter-fwd .trow, #app.enter-back .trow, #app.enter .trow, #app.enter .homehero, .welcome .hero *, .welcome > * { animation: none !important; }
   .navpill, .tap { transition: none; } .tap:hover { transform: none; }
   .livedot, .ebmsg.busy::before, .skel .sk { animation: none; }
