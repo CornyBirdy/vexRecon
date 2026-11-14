@@ -473,13 +473,35 @@ function evStatus(e, started, hasNext, played) {
   if (ds != null) return { cls: 'done', html: `Ended ${de === 0 ? 'today' : -de + (de === -1 ? ' day' : ' days') + ' ago'}` };
   return started && hasNext ? { cls: 'now', html: '<span class="livedot"></span>Event in progress' } : { cls: 'soon', html: played ? 'All our matches are played' : hasNext ? 'Matches are scheduled' : 'Waiting for the match schedule' };
 }
-// A dot-matrix of OPR for the top teams, ours lit in the accent: where we sit at a glance.
-function oprViz(st, me) {
+// Stat cards in the instrument-panel style: icon + label, a big light number with a muted denominator, a delta chip, and a dot-matrix chart.
+const IC_RANK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v4a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v4M8 21h8M10 17h4"/></svg>';
+const IC_REC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M12 6v12M8 12h.01M16 12h.01"/></svg>';
+const delta = (txt, up) => `<span class="delta ${up ? 'up' : 'dn'}"><svg viewBox="0 0 12 12" aria-hidden="true">${up ? '<path d="M6 10V2M2.5 5.5L6 2l3.5 3.5"/>' : '<path d="M6 2v8M2.5 6.5L6 10l3.5-3.5"/>'}</svg>${txt}</span>`;
+// columns: [{ h: lit dots from the bottom, cls }]
+const dotMatrix = (cols, rows, label) => `<div class="dm" role="img" aria-label="${esc(label)}">${cols.map((c, i) => `<div class="dc ${c.cls || ''}" style="--c:${i}">${Array.from({ length: rows }, (_, r) => `<i${rows - r <= c.h ? ' class="on"' : ''}></i>`).join('')}</div>`).join('')}</div>`;
+const stat = o => `<article class="stat ${o.attrs ? 'tap' : ''}" ${o.attrs ? o.attrs + ' role="button" tabindex="0"' : ''}><div class="shead">${o.icon}<span>${o.label}</span></div><div class="sbody"><div class="sl"><div class="sbig">${o.big}${o.den ? `<small>/${o.den}</small>` : ''}${o.chip || ''}</div><div class="scap">${o.cap}</div></div>${o.viz || ''}</div></article>`;
+function rankStat(st, me, ts) {
   const arr = [...st.by.entries()].filter(([, r]) => r && r.opr != null && isFinite(r.opr)).sort((a, b) => b[1].opr - a[1].opr);
-  if (arr.length < 3 || !me || me.opr == null) return '';
-  let top = arr.slice(0, 8); if (!top.some(([n]) => n === US)) top = [...top.slice(0, 7), [US, me]];
-  const max = Math.max(...top.map(([, r]) => r.opr), 1);
-  return `<div class="hviz" role="img" aria-label="OPR of the top ${top.length} teams, ours highlighted"><div class="vcols">${top.map(([n, r], c) => `<div class="vcol ${n === US ? 'me' : ''}" style="--c:${c}">${'<i></i>'.repeat(Math.max(1, Math.round(Math.max(0, r.opr) / max * 8)))}</div>`).join('')}</div><span>OPR · top ${top.length}</span></div>`;
+  let viz = '';
+  if (arr.length >= 3 && me && me.opr != null) {
+    let top = arr.slice(0, 12); if (!top.some(([n]) => n === US)) top = [...top.slice(0, 11), [US, me]];
+    const max = Math.max(...top.map(([, r]) => r.opr), 1);
+    viz = dotMatrix(top.map(([n, r]) => ({ h: Math.max(1, Math.round(Math.max(0, r.opr) / max * 7)), cls: n === US ? 'me' : '' })), 7, `OPR of the top ${top.length} teams, ours highlighted`);
+  }
+  const ranked = me && me.rank != null;
+  return stat({ icon: IC_RANK, label: 'Our rank' + (st.official ? '' : ' (calculated)'), attrs: 'data-act="gorank"',
+    big: ranked ? `<span data-count="${me.rank}" data-ck="rank">${me.rank}</span>` : '–', den: ranked ? ts.length : '',
+    chip: me && me.ccwm != null ? delta('CCWM ' + sgn(me.ccwm), me.ccwm >= 0) : '',
+    cap: me && (me.w + me.l + me.t) ? `Record ${rec(me)}${me.opr != null ? ' · OPR ' + f1(me.opr) : ''}` : 'Your ranking shows up once qualification matches are scored.', viz });
+}
+function recStat(ours) {
+  const done = ours.filter(scored), sc = m => { const s = side(m); return s === 'red' ? [m.rs, m.bs] : [m.bs, m.rs] };
+  const w = done.filter(m => { const [a, b] = sc(m); return a > b }).length;
+  const cols = done.slice(-12).map(m => { const [a, b] = sc(m); return { a, cls: a > b ? 'w' : a < b ? 'l' : 't' } }), max = Math.max(...cols.map(c => c.a), 1);
+  return stat({ icon: IC_REC, label: 'Our matches', attrs: 'data-act="tab" data-v="matches"',
+    big: done.length ? `<span data-count="${w}" data-ck="w">${w}</span>` : '–', den: done.length || '',
+    chip: done.length ? delta(Math.round(w / done.length * 100) + '% won', w * 2 >= done.length) : '', cap: done.length ? 'matches won so far' : 'Your matches show up once scoring starts',
+    viz: cols.length ? dotMatrix(cols.map(c => ({ h: Math.max(1, Math.round(c.a / max * 7)), cls: c.cls })), 7, 'Our score in each match: green for a win, red for a loss, amber for a tie') : '' });
 }
 // Home: a status line, our rank as the big number and the next match we play (the tab bar does the navigating).
 function vHome() {
@@ -487,10 +509,6 @@ function vHome() {
   const st = stats(), me = st.by.get(US), ts = teams(), all = matches();
   const ours = all.filter(m => side(m)), next = ours.find(m => !scored(m));
   const away = next ? all.filter(m => !scored(m)).indexOf(next) : -1, stat = evStatus(e, all.some(scored), !!next, ours.length && ours.every(scored));
-  const recent = ours.filter(scored).slice(-5).map(m => { const s = side(m), a = s === 'red' ? m.rs : m.bs, b = s === 'red' ? m.bs : m.rs; return a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }).join('');
-  const hero = me && me.rank != null
-    ? `<div class="hbig"><span data-count="${me.rank}" data-ck="rank">${me.rank}</span><small>of ${ts.length}</small></div><div class="hrow"><span class="hchip">${rec(me)}</span>${me.opr != null ? `<span class="hchip">OPR ${f1(me.opr)}</span>` : ''}${me.ccwm != null ? `<span class="hchip">CCWM ${sgn(me.ccwm)}</span>` : ''}</div>`
-    : '<div class="hbig">–</div><p class="hnote">Your ranking shows up once qualification matches are scored.</p>';
   let nx = '';
   if (next) {
     const s = side(next), sides = [['r', 'Red alliance', next.red, 'red'], ['b', 'Blue alliance', next.blue, 'blue']]; if (s === 'blue') sides.reverse();
@@ -498,7 +516,7 @@ function vHome() {
     <div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${s === col ? 'mine' : ''}"><span>${l}</span>${chips(next, arr)}</div>`).join('')}</div></div>`;
   }
   return `<div class="home"><div class="greet"><div><p class="live ${stat.cls}">${stat.html}</p><h1>${esc(name || US)}${name ? ' <button class="link namechg" data-act="setname" data-v="">Change</button>' : ''}</h1></div></div>
-  <div class="homehero tap" data-act="gorank" role="button" tabindex="0" aria-label="Open the rankings"><span class="hl">Our rank${st.official ? '' : ' (calculated)'}</span>${hero}${oprViz(st, me)}${recent ? `<div class="hrecent"><span>Recent</span>${recent}</div>` : ''}</div>
+  <section class="panel"><div class="phead"><h2>Event overview</h2></div>${rankStat(st, me, ts)}${recStat(ours)}</section>
   ${nx}</div>`;
 }
 
@@ -532,7 +550,7 @@ function vTeamList() {
     const n = notes('scout', t.number).length + notes('team', t.number).length, hay = (t.number + t.name + t.school).toLowerCase();
     const r = st.by.get(t.number), k = skillOf(t.number, 'season');
     const bits = [r && r.rank != null ? 'Rank ' + r.rank : '', k && k.c != null ? 'Skills ' + fmt(k.c) + ' (D ' + fmt(k.d) + ' · A ' + fmt(k.p) + ')' : '', r && r.opr != null ? 'OPR ' + f1(r.opr) : ''].filter(Boolean);
-    return `<div class="trow ${t.number === US ? 'us' : ''}" data-act="team" data-t="${t.number}" data-q="${esc(hay)}" ${q && !hay.includes(q) ? 'style="display:none"' : ''}><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div><div class="mut">${esc(t.school)}${n ? ' · ' + n + (n === 1 ? ' note' : ' notes') : ''}</div>${bits.length ? `<div class="mut tstat">${bits.join(' · ')}</div>` : ''}</div><span class="chev" aria-hidden="true">›</span></div>` }).join('') || empty('No teams yet.')}</div>
+    return `<div class="trow ${t.number === US ? 'us' : ''}" data-act="team" data-t="${t.number}" data-q="${esc(hay)}" ${q && !hay.includes(q) ? 'style="display:none"' : ''}><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div><div class="mut">${esc(t.school)}${n ? ' · ' + n + (n === 1 ? ' note' : ' notes') : ''}</div>${bits.length ? `<div class="mut tstat">${bits.join(' · ')}</div>` : ''}</div>${r && (r.opr != null || r.rank != null) ? `<span class="rv"><i class="rdot ${r.rank == null ? '' : r.rank / ts.length <= .34 ? 'g' : r.rank / ts.length <= .67 ? 'y' : 'r'}"></i>${r.opr != null ? f1(r.opr) : '#' + r.rank}</span>` : '<span class="chev" aria-hidden="true">›</span>'}</div>` }).join('') || empty('No teams yet.')}</div>
   <details class="card" id="d-addteam" ${det('d-addteam', !ts.length)}><summary><h2>Add a team manually</h2></summary><div class="row"><input id="t_n" placeholder="Number e.g. 52111A" aria-label="Team number"><input id="t_name" placeholder="Team name" aria-label="Team name"><input id="t_s" placeholder="School" aria-label="School"><button class="p" data-act="addteam">Add</button></div></details>`;
 }
 
@@ -652,7 +670,7 @@ function vMatches() {
   const all = matches(), list = mf === 'all' ? all : all.filter(m => side(m));
   const st = stats(), me = st.by.get(US), playedN = all.filter(m => side(m) && scored(m)).length;
   const rankChip = me && me.rank != null ? `<span class="hchip">Rank ${me.rank} of ${teams().length}</span>` : '';
-  let h = `<div class="homehero"><span class="hl">Our record</span>${me && (me.w + me.l + me.t) ? `<div class="hbig"><span data-count="${me.w}" data-ck="w">${me.w}</span><small>– ${me.l} – ${me.t}</small></div><div class="hrow">${rankChip}${me.opr != null ? `<span class="hchip">OPR ${f1(me.opr)}</span>` : ''}</div>` : `<div class="hbig">–</div><p class="hnote">${playedN ? playedN + ' of our matches played.' : 'Your record shows up once qualification matches are scored.'}</p>`}</div>` +
+  let h = `<section class="panel">${recStat(all.filter(m => side(m)))}</section>` +
     segBar([['ours', 'Our matches'], ['all', 'All matches']], mf, 'mfilter');
   h += list.map(m => {
     const s = side(m), o = open[m.id], ours = mf !== 'all' && !!s; // Our matches: our alliance is always the left column, and the score reads us–them

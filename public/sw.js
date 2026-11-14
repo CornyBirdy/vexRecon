@@ -1,7 +1,7 @@
 // Offline support: keeps a copy of the app itself so it opens with no signal.
 // Data (/api) is never cached here – the app keeps its own copy and an outbox of unsent changes.
-const CACHE = 'recon-v22';
-const SHELL = ['/', '/index.html', '/tokens.css', '/app.css', '/glass.css', '/app.js', '/fonts/plus-jakarta-sans-latin-wght-normal.woff2', '/fonts/plus-jakarta-sans-latin-ext-wght-normal.woff2', '/fonts/jetbrains-mono-latin-400-normal.woff2', '/fonts/jetbrains-mono-latin-500-normal.woff2', '/logo.svg', '/logo-light.svg', '/manifest.webmanifest', '/icon.svg', '/icon-light.svg', '/icon-dark.svg', '/icon-32.png', '/icon-32-light.png', '/favicon.ico', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png'];
+const CACHE = 'recon-v23';
+const SHELL = ['/', '/index.html', '/tokens.css', '/app.css', '/glass.css', '/app.js', '/fonts/inter-latin-wght-normal.woff2', '/fonts/inter-latin-ext-wght-normal.woff2', '/fonts/plus-jakarta-sans-latin-wght-normal.woff2', '/fonts/plus-jakarta-sans-latin-ext-wght-normal.woff2', '/fonts/jetbrains-mono-latin-400-normal.woff2', '/fonts/jetbrains-mono-latin-500-normal.woff2', '/logo.svg', '/logo-light.svg', '/manifest.webmanifest', '/icon.svg', '/icon-light.svg', '/icon-dark.svg', '/icon-32.png', '/icon-32-light.png', '/favicon.ico', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
