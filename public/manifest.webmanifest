@@ -3,8 +3,8 @@
   "short_name": "Recon",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#00100e",
-  "theme_color": "#00100e",
+  "background_color": "#101211",
+  "theme_color": "#101211",
   "icons": [
     {
       "src": "icon.svg",

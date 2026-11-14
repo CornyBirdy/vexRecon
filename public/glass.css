@@ -33,8 +33,8 @@ h1{font:600 28px/1.1 var(--font);letter-spacing:-.025em;margin:0}
 .greet{padding:var(--s-3) var(--s-2) 0}.greet p{margin:0 0 2px}
 
 /* hero: tinted glass with one big number, not a solid colour block */
-.homehero{position:relative;overflow:hidden;border-radius:var(--r-xl);padding:var(--s-6);border:1px solid color-mix(in oklch,var(--a) 32%,var(--edge));
-  background:radial-gradient(90% 130% at 100% 0%,color-mix(in oklch,var(--a) 30%,transparent),transparent 62%),linear-gradient(150deg,color-mix(in oklch,var(--a) 12%,var(--card)),var(--card));box-shadow:var(--shadow-window)}
+.homehero{position:relative;overflow:hidden;border-radius:var(--r-xl);padding:var(--s-6);border:1px solid var(--edge);
+  background: var(--card);box-shadow:var(--shadow-window)}
 .hl{font-size:13px;font-weight:600;color:var(--ink-muted)}
 .hbig{font:300 68px/1 var(--font);letter-spacing:-.045em;font-variant-numeric:tabular-nums;margin:var(--s-2) 0 var(--s-4)}
 .hbig small{font-size:20px;color:var(--ink-muted);font-weight:400;margin-left:8px;letter-spacing:0}
@@ -64,7 +64,7 @@ h1{font:600 28px/1.1 var(--font);letter-spacing:-.025em;margin:0}
 
 /* segmented control and tab bar: the selected item is a raised pill */
 .seg{padding:4px}
-.seg button.on{background:var(--card);color:var(--ink);box-shadow:0 4px 14px -6px var(--shadow-c)}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow: 0 0 0 1px var(--hair)}
 nav button.on{box-shadow:none;background:var(--a-soft);color:var(--accent-text)}
 @media(min-width:860px){.home{grid-template-columns:1.1fr 1fr;align-items:start}.greet{grid-column:1/-1}}
 
@@ -109,7 +109,7 @@ body.out header { background: transparent; border: 0; box-shadow: none; backdrop
 body.out header::after, body.out header .brand { display: none; }
 @media (min-width: 860px) { body.out header { width: auto; margin-inline: auto; max-width: 836px; } }
 .welcome .hero { padding-top: var(--s-5); }
-.welcome .hero .heroicon { width: 84px; height: 84px; border-radius: 22px; box-shadow: var(--glow-lg), 0 0 70px color-mix(in oklch, var(--a) 38%, transparent); animation: iconIn .7s var(--spring) both; }
+.welcome .hero .heroicon { width: 84px; height: 84px; border-radius: 22px;  animation: iconIn .7s var(--spring) both; }
 .welcome .hero h1 { animation: vUp .5s .08s var(--ease) both; }
 .welcome .hero p { animation: vUp .5s .16s var(--ease) both; }
 .welcome > .seg, .welcome > .card { animation: vUp .5s .24s var(--ease) both; }
@@ -129,7 +129,7 @@ body.out header::after, body.out header .brand { display: none; }
 .trow:nth-child(6) { --i: 6; } .trow:nth-child(7) { --i: 7; } .trow:nth-child(8) { --i: 8; } .trow:nth-child(n+9) { --i: 9; }
 #app.enter-fwd .homehero, #app.enter-back .homehero, #app.enter .homehero { animation: vUp .5s var(--ease) both; }
 .tap { cursor: pointer; transition: transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s; }
-.tap:hover { transform: translateY(-2px); box-shadow: var(--shadow-window); }
+.tap:hover { box-shadow: var(--shadow-window); }
 .tap:active { transform: scale(.985); transition-duration: .08s; }
 .tap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button:active { transform: scale(.96); }
@@ -161,7 +161,7 @@ body.out .evbar { display: none; }
 /* segmented controls: one raised highlight that glides between the items */
 .seg { position: relative; }
 .seg button { position: relative; z-index: 1; }
-.segpill { position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: var(--r-sm); background: var(--card); box-shadow: 0 4px 14px -6px var(--shadow-c); pointer-events: none; }
+.segpill { position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: var(--r-sm); background: var(--card); box-shadow: 0 0 0 1px var(--hair); pointer-events: none; }
 .seg.pilled button.on { background: transparent; box-shadow: none; }
 .welcome.swap .hero *, .welcome.swap > .seg, .welcome.swap > .card { animation: none !important; }
 
@@ -175,3 +175,18 @@ body.out .evbar { display: none; }
   .navpill, .tap { transition: none; } .tap:hover { transform: none; }
   .livedot, .ebmsg.busy::before, .skel .sk { animation: none; }
 }
+
+/* ================= Flat: quiet chrome, one accent, no glass, glows or colour washes (unslop method) ================= */
+:root { --spring: cubic-bezier(0.2, 0.7, 0.2, 1); } /* one easing curve: nothing overshoots */
+*, *::before, *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+header:after { display: none; }
+.tap:hover { border-color: var(--border-ctl); }
+.seg.pilled button.on, .seg button.on { box-shadow: none; }
+nav button.on svg { transform: none; }
+.flash { animation: flashFade 1.1s ease-out; }
+@keyframes flashFade { 0% { background-color: var(--a-soft); } 100% { background-color: transparent; } }
+/* signature: the viewfinder corners of the Recon mark, on the rank card only */
+.homehero::before, .homehero::after { content: ""; position: absolute; width: 14px; height: 14px; border: 2px solid var(--a); opacity: .75; pointer-events: none; }
+.homehero::before { top: 14px; right: 14px; border-width: 2px 2px 0 0; border-radius: 0 4px 0 0; }
+.homehero::after { bottom: 14px; left: 14px; border-width: 0 0 2px 2px; border-radius: 0 0 0 4px; }
+.trow .num { background: var(--field); }
