@@ -64,14 +64,12 @@ exit /b 0
 :run
 cd /d "%~dp0vexRecon"
 
-if not exist .env (
-  echo.
-  echo No .env yet. Paste your RobotEvents API key, or just press Enter to skip.
-  echo Without a key, team numbers aren't checked and event import won't work.
-  set /p KEY=ROBOTEVENTS_KEY:
-  > .env echo ROBOTEVENTS_KEY=%KEY%
-  >> .env echo ADMIN_CODE=test
+set "NEEDKEY="
+if not exist .env set "NEEDKEY=1"
+if exist .env (
+  findstr /r /c:"^ROBOTEVENTS_KEY=." .env >nul 2>nul || (findstr /c:"# key skipped" .env >nul 2>nul || set "NEEDKEY=1")
 )
+if defined NEEDKEY call :askkey
 
 if not exist node_modules call npm install
 where netlify >nul 2>nul
@@ -82,3 +80,17 @@ echo Starting Recon at http://localhost:8888
 start "" http://localhost:8888
 call netlify dev
 pause
+goto :eof
+
+:askkey
+:: Asked in its own routine so %KEY% is read AFTER you type it (inside an if ( ) block it would always be empty).
+echo.
+echo Paste your RobotEvents API key, or just press Enter to skip.
+echo Without a key, team numbers aren't checked and event import won't work.
+set "KEY="
+set /p "KEY=ROBOTEVENTS_KEY: "
+if exist .env (findstr /v /b /c:"ROBOTEVENTS_KEY=" /c:"# key skipped" .env > .env.tmp) else (type nul > .env.tmp)
+if defined KEY (>> .env.tmp echo ROBOTEVENTS_KEY=%KEY%) else (>> .env.tmp echo # key skipped)
+findstr /b /c:"ADMIN_CODE=" .env.tmp >nul 2>nul || >> .env.tmp echo ADMIN_CODE=test
+move /y .env.tmp .env >nul
+exit /b 0

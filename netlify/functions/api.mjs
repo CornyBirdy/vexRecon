@@ -454,7 +454,7 @@ export default async (req) => {
       const divs = (e.divisions || []).map((d) => d.id);
       const docs = [["events/" + eid, {
         picks: [], link: `https://events.vex.com/robot-competitions/vex-robotics-competition/${sku}.html`,
-        ...(old || {}), name: e.name, sku, reid: e.id, divs, season: e.season && e.season.id,
+        ...(old || {}), name: e.name, sku, reid: e.id, divs, season: e.season && e.season.id, start: e.start, end: e.end,
       }]];
       const teams = await all(`/events/${e.id}/teams`);
       for (const t of teams)

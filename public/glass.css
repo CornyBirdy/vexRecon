@@ -79,3 +79,77 @@ nav button.on{box-shadow:none;background:var(--a-soft);color:var(--accent-text)}
 .sbar { height: 8px; border-radius: var(--r-xs); background: var(--surface-track); overflow: hidden; }
 .sbar > i { display: block; height: 100%; border-radius: var(--r-xs); background: var(--accent-fill); }
 .hero-pad { padding: 0; }
+
+/* ================= Recon polish: live status, scouts, event finder, welcome, motion ================= */
+:root { --spring: cubic-bezier(0.34, 1.4, 0.64, 1); }
+
+/* Home status line and the name with Change beside it */
+.live { margin: 0 0 4px; display: flex; align-items: center; gap: 8px; font: 600 13px var(--font); color: var(--ink-muted); }
+.live.now { color: var(--success); }
+.livedot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 0 color-mix(in oklch, var(--success) 60%, transparent); animation: livePulse 1.8s ease-out infinite; flex: none; }
+@keyframes livePulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--success) 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 9px transparent; } }
+.greet h1 { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.greet h1 .namechg { font-size: 14px; font-weight: 600; letter-spacing: 0; }
+
+/* team scouts you can remove */
+.scouts { margin: var(--s-1) 0 var(--s-3); }
+.srow { display: flex; align-items: center; gap: var(--s-3); padding: 9px 0; border-top: 1px solid var(--hair); }
+.srow:first-child { border-top: 0; }
+.srow .avatar { width: 32px; height: 32px; border-radius: var(--r-md); display: grid; place-items: center; background: var(--a-soft); font-weight: 700; flex: none; }
+.srow .grow { min-width: 0; overflow-wrap: anywhere; }
+
+/* event finder: spinner, skeleton rows, filters */
+.ebmsg.busy::before { content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; border-radius: 50%; border: 2px solid var(--hair); border-top-color: var(--a); animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.skel .sk { height: 12px; border-radius: var(--r-xs); background: linear-gradient(90deg, var(--hair) 25%, color-mix(in oklch, var(--ink) 14%, transparent) 50%, var(--hair) 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
+.skel .sk1 { width: 70%; height: 15px; margin-bottom: 9px; } .skel .sk2 { width: 45%; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.ebfilters { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; margin: var(--s-2) 0; }
+.ebfilters .sel { width: auto; flex: 1 1 130px; min-width: 120px; }
+.ebfilters .chip { margin: 0; }
+
+/* welcome screen: no duplicate brand bar, a glowing icon, the card in glass */
+body.out header { background: transparent; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0; margin: var(--s-3) var(--s-3) 0; justify-content: flex-end; max-width: none; overflow: visible; }
+body.out header::after, body.out header .brand { display: none; }
+@media (min-width: 860px) { body.out header { width: auto; margin-inline: auto; max-width: 836px; } }
+.welcome .hero { padding-top: var(--s-5); }
+.welcome .hero .heroicon { width: 84px; height: 84px; border-radius: 22px; box-shadow: var(--glow-lg), 0 0 70px color-mix(in oklch, var(--a) 38%, transparent); animation: iconIn .7s var(--spring) both; }
+.welcome .hero h1 { animation: vUp .5s .08s var(--ease) both; }
+.welcome .hero p { animation: vUp .5s .16s var(--ease) both; }
+.welcome > .seg, .welcome > .card { animation: vUp .5s .24s var(--ease) both; }
+@keyframes iconIn { from { opacity: 0; transform: scale(.6) rotate(-8deg); } to { opacity: 1; transform: none; } }
+.card.login { border-radius: var(--r-xl); padding: var(--s-5); }
+
+/* motion: a page slides the way you are going, rows arrive one after another, cards you can tap react to the tap */
+@keyframes vFwd { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: none; } }
+@keyframes vBack { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: none; } }
+@keyframes vUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes rowIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+#app.enter-fwd { animation: vFwd .34s var(--ease) both; }
+#app.enter-back { animation: vBack .34s var(--ease) both; }
+#app.enter-up { animation: vUp .26s var(--ease) both; }
+#app.enter-fwd .trow, #app.enter-back .trow, #app.enter .trow { animation: rowIn .38s var(--ease) both; animation-delay: calc(var(--i, 0) * 32ms); }
+.trow:nth-child(1) { --i: 1; } .trow:nth-child(2) { --i: 2; } .trow:nth-child(3) { --i: 3; } .trow:nth-child(4) { --i: 4; } .trow:nth-child(5) { --i: 5; }
+.trow:nth-child(6) { --i: 6; } .trow:nth-child(7) { --i: 7; } .trow:nth-child(8) { --i: 8; } .trow:nth-child(n+9) { --i: 9; }
+#app.enter-fwd .homehero, #app.enter-back .homehero, #app.enter .homehero { animation: vUp .5s var(--ease) both; }
+.tap { cursor: pointer; transition: transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s; }
+.tap:hover { transform: translateY(-2px); box-shadow: var(--shadow-window); }
+.tap:active { transform: scale(.985); transition-duration: .08s; }
+.tap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:active { transform: scale(.96); }
+.flash { animation: flashRing 1.3s ease-out; }
+@keyframes flashRing { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--a) 70%, transparent); background-color: var(--a-soft); } 100% { box-shadow: 0 0 0 16px transparent; } }
+/* the tab bar's selected pill glides to the new tab */
+nav { overflow: visible; }
+nav button { position: relative; z-index: 1; }
+nav button.on { background: transparent; box-shadow: none; }
+.navpill { position: absolute; left: 0; top: var(--s-1); height: calc(100% - var(--s-1) * 2); width: 0; opacity: 0; border-radius: var(--r-md); background: var(--a-soft); pointer-events: none; z-index: 0; transition: transform .42s var(--spring), width .42s var(--spring), opacity .2s; }
+nav button.on svg { transform: translateY(-2px) scale(1.08); }
+/* the team sheet springs up */
+@keyframes sheetSpring { from { opacity: 0; transform: translateY(56px) scale(.97); } to { opacity: 1; transform: none; } }
+#modal.opening > div { animation: sheetSpring .46s var(--spring) both; }
+@media (prefers-reduced-motion: reduce) {
+  #app.enter-fwd, #app.enter-back, #app.enter-up, #app.enter-fwd .trow, #app.enter-back .trow, #app.enter .trow, #app.enter .homehero, .welcome .hero *, .welcome > * { animation: none !important; }
+  .navpill, .tap { transition: none; } .tap:hover { transform: none; }
+  .livedot, .ebmsg.busy::before, .skel .sk { animation: none; }
+}

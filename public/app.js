@@ -296,7 +296,9 @@ async function init() {
 
 // ---------- views ----------
 const SUN = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>', MOON = '<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>';
-function applyTheme() { const t = ls('theme') || 'light'; document.documentElement.dataset.theme = t; $('#theme').innerHTML = t === 'dark' ? SUN : MOON }
+const osTheme = () => matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+function applyTheme() { const t = ls('theme'); if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; $('#theme').innerHTML = (t || osTheme()) === 'dark' ? SUN : MOON }
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (!ls('theme')) applyTheme() });
 const TABS = [
   ['event', '<svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>', 'Event'],
   ['matches', '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M12 6v12M8 12h.01M16 12h.01"/></svg>', 'Matches'],
@@ -316,7 +318,18 @@ function flipPlay(m) {
   if (reduced()) return;
   document.querySelectorAll('#app [data-flip]').forEach(e => { const t = m.get(e.dataset.flip); if (t == null) return; const dy = t - e.getBoundingClientRect().top; if (Math.abs(dy) > 1) e.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)' }) });
 }
-function replay(el, c) { el.classList.remove(c); void el.offsetWidth; el.classList.add(c) }
+function replay(el, c) { if (el.id === 'app') ['enter', 'enter-fwd', 'enter-back', 'enter-up'].forEach(k => el.classList.remove(k)); el.classList.remove(c); void el.offsetWidth; el.classList.add(c) }
+let navAnim = '';
+const lastCounts = {};
+function countUp() {
+  document.querySelectorAll('#app [data-count]').forEach(el => {
+    const to = +el.dataset.count, ck = el.dataset.ck, from = ck in lastCounts ? lastCounts[ck] : 0; lastCounts[ck] = to;
+    if (reduced() || from === to) return;
+    const t0 = performance.now(), d = 650, f = t => { const p = Math.min(1, (t - t0) / d); el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(f) };
+    el.textContent = from; requestAnimationFrame(f);
+  });
+}
+function flash(el) { if (!el || reduced()) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash') }
 const fresh = n => seenNotes && !seenNotes.has(n.id) ? 'fresh' : '';
 
 function render() {
@@ -333,11 +346,14 @@ function render() {
   const nav = $('#nav');
   if (!nav.children.length) nav.innerHTML = TABS.map(t => `<button data-act="tab" data-v="${t[0]}">${t[1]}<span>${t[2]}</span></button>`).join('');
   nav.querySelectorAll('button').forEach(b => { const on = b.dataset.v === tab; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false') });
+  let pill = nav.querySelector('.navpill'); if (!pill) { pill = document.createElement('i'); pill.className = 'navpill'; nav.prepend(pill) }
+  const onb = nav.querySelector('button.on'); if (onb) { pill.style.width = onb.offsetWidth + 'px'; pill.style.transform = `translateX(${onb.offsetLeft}px)`; pill.style.opacity = 1 }
   const key = viewKey(), same = key === lastView, before = same ? flipCapture() : null, y = scrollY;
   $('#app').innerHTML = ({ event: vEvent, matches: vMatches, scout: vScout, pick: vPick })[tab]();
-  scrollTo(0, same ? y : 0);
-  if (same) flipPlay(before); else if (lastView && !reduced()) replay($('#app'), 'enter');
-  lastView = key; justOpened = null;
+  scrollTo({ top: same ? y : 0, behavior: 'instant' });
+  if (same) flipPlay(before); else if (lastView && !reduced()) replay($('#app'), 'enter' + (navAnim ? '-' + navAnim : '')); navAnim = '';
+  if (!same) for (const k in lastCounts) delete lastCounts[k];
+  lastView = key; justOpened = null; countUp();
   const md = $('#modal');
   $('#mbody').innerHTML = mTeam === ':about' ? vAbout() : mTeam ? vTeam(mTeam) : '';
   if (mTeam && !modalShown) { md.style.display = 'block'; if (!reduced()) replay(md, 'opening') }
@@ -394,8 +410,8 @@ const settingsCard = () => `<details class="card" id="d-settings" ${det('d-setti
   <h3>Team code</h3><div class="row"><code id="codeval" class="codeval" data-shown="0">${'•'.repeat(Math.max(6, code.length))}</code><button data-act="showcode" aria-pressed="false">Show</button><button data-act="copycode">Copy</button></div>
   <p class="mut">Anyone with your team number and this code can see and edit your team’s scouting. <button class="link" data-act="rotate">Make a new code</button></p>
   <h3>Recovery key</h3>${rkHTML()}
-  <h3>Scout names (comma separated)</h3><input id="cfg_names" value="${esc(NAMES.join(', '))}" placeholder="Names show up here as people join">
-  <div class="foot"><button class="p" data-act="savecfg">Save names</button></div>
+  <h3>Scouts</h3><div class="scouts">${NAMES.map(n => `<div class="srow"><span class="avatar">${esc((n[0] || '?').toUpperCase())}</span><span class="grow">${esc(n)}${n === name ? ' <span class="mut">(you)</span>' : ''}</span><button class="d" data-act="delname" data-v="${esc(n)}">Remove</button></div>`).join('') || '<p class="mut">Names show up here as people join.</p>'}</div>
+  <div class="row"><input id="newscout" placeholder="Add a scout" autocomplete="off" aria-label="Add a scout"><button data-act="addscout">Add</button></div>
   ${installRow()}
   <div class="foot"><button class="link" data-act="about">About Recon</button><span class="grow"></span><button class="d" data-act="logout">Log out</button></div></details>`;
 const whoCard = (title, text) => `<div class="card"><h2>${title}</h2><p class="mut">${text}</p>${nameChips()}<div class="row"><input id="myname" placeholder="${NAMES.length ? 'Not listed? Type your name' : 'Your name'}" autocomplete="given-name" aria-label="Your name"><button data-act="addname">That’s me</button></div></div>`;
@@ -412,26 +428,36 @@ const segBar = (items, cur, act) => `<div class="seg" role="group">${items.map((
 const tlist = () => '';
 const tiles = a => `<div class="tiles">${a.map(([v, l, sub]) => `<div class="tile"><b>${v}</b><span>${l}</span>${sub ? `<small>${sub}</small>` : ''}</div>`).join('')}</div>`;
 
-// Home: a greeting, our rank as the big number, the next match we play, and one-tap shortcuts.
+// What's happening now: live / starts in N days / ended, plus how far off our next match is.
+function evStatus(e, next, away, played) {
+  const today = new Date(new Date().toDateString() + ' 12:00:00');
+  const day = d => d ? Math.round((new Date(String(d).slice(0, 10) + 'T12:00:00') - today) / 864e5) : null;
+  const ds = day(e.start), de = day(e.end || e.start);
+  const nx = next ? `${esc(next.label)} ${away <= 0 ? 'is up next' : 'in ' + away + (away === 1 ? ' match' : ' matches')}` : '';
+  if (ds != null && ds > 0) return { cls: 'soon', html: `Starts ${ds === 1 ? 'tomorrow' : 'in ' + ds + ' days'}${nx ? ' · ' + nx : ''}` };
+  if (ds != null && de >= 0) return { cls: 'now', html: `<span class="livedot"></span>Live now${nx ? ' · ' + nx : ''}` };
+  if (ds != null) return { cls: 'done', html: `Ended ${de === 0 ? 'today' : -de + (de === -1 ? ' day' : ' days') + ' ago'}` };
+  return nx ? { cls: 'now', html: `<span class="livedot"></span>${nx}` } : { cls: 'soon', html: played ? 'All our matches are played' : 'Waiting for the match schedule' };
+}
+// Home: a status line, our rank as the big number, the next match we play, and one-tap shortcuts.
 function vHome() {
   const e = evObj(); if (!e) return '';
   const st = stats(), me = st.by.get(US), ts = teams(), all = matches();
-  const hr = new Date().getHours(), hello = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
   const ours = all.filter(m => side(m)), next = ours.find(m => !scored(m));
-  const away = next ? all.filter(m => !scored(m)).indexOf(next) : -1;
+  const away = next ? all.filter(m => !scored(m)).indexOf(next) : -1, stat = evStatus(e, next, away, ours.filter(scored).length);
   const recent = ours.filter(scored).slice(-5).map(m => { const s = side(m), a = s === 'red' ? m.rs : m.bs, b = s === 'red' ? m.bs : m.rs; return a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }).join('');
   const hero = me && me.rank != null
-    ? `<div class="hbig">${me.rank}<small>of ${ts.length}</small></div><div class="hrow"><span class="hchip">${rec(me)}</span>${me.opr != null ? `<span class="hchip">OPR ${f1(me.opr)}</span>` : ''}${me.ccwm != null ? `<span class="hchip">CCWM ${sgn(me.ccwm)}</span>` : ''}</div>`
+    ? `<div class="hbig"><span data-count="${me.rank}" data-ck="rank">${me.rank}</span><small>of ${ts.length}</small></div><div class="hrow"><span class="hchip">${rec(me)}</span>${me.opr != null ? `<span class="hchip">OPR ${f1(me.opr)}</span>` : ''}${me.ccwm != null ? `<span class="hchip">CCWM ${sgn(me.ccwm)}</span>` : ''}</div>`
     : '<div class="hbig">–</div><p class="hnote">Your ranking shows up once qualification matches are scored.</p>';
   let nx = '';
   if (next) {
     const s = side(next), sides = [['r', 'Red alliance', next.red, 'red'], ['b', 'Blue alliance', next.blue, 'blue']]; if (s === 'blue') sides.reverse();
-    nx = `<div class="card next"><div class="nhead"><h2>Next match</h2><span class="chip warn">${esc(next.label)} · ${away <= 0 ? 'up next' : 'in ' + away + (away === 1 ? ' match' : ' matches')}</span></div>
+    nx = `<div class="card next tap" data-act="gomatch" data-id="${esc(next.id)}" role="button" tabindex="0" aria-label="Open ${esc(next.label)}"><div class="nhead"><h2>Next match</h2><span class="chip warn">${esc(next.label)} · ${away <= 0 ? 'up next' : 'in ' + away + (away === 1 ? ' match' : ' matches')}</span></div>
     <div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${s === col ? 'mine' : ''}"><span>${l}</span>${chips(next, arr)}</div>`).join('')}</div></div>`;
   }
   const qa = (t, label) => `<button data-act="tab" data-v="${t}">${TABS.find(x => x[0] === t)[1]}<span>${label}</span></button>`;
-  return `<div class="home"><div class="greet"><div><p class="mut">${hello}</p><h1>${esc(name || US)}</h1></div></div>
-  <div class="homehero"><span class="hl">Our rank${st.official ? '' : ' (calculated)'}</span>${hero}${recent ? `<div class="hrecent"><span>Recent</span>${recent}</div>` : ''}</div>
+  return `<div class="home"><div class="greet"><div><p class="live ${stat.cls}">${stat.html}</p><h1>${esc(name || US)}${name ? ' <button class="link namechg" data-act="setname" data-v="">Change</button>' : ''}</h1></div></div>
+  <div class="homehero tap" data-act="gorank" role="button" tabindex="0" aria-label="Open the rankings"><span class="hl">Our rank${st.official ? '' : ' (calculated)'}</span>${hero}${recent ? `<div class="hrecent"><span>Recent</span>${recent}</div>` : ''}</div>
   ${nx}<div class="qa">${qa('scout', 'Scout a team')}${qa('matches', 'Matches')}${qa('pick', 'Picklist')}</div></div>`;
 }
 
@@ -442,8 +468,7 @@ function vEvent() {
   const me = name ? `<p class="mut meta">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></p>` : '';
   if (!e) return h + `<div class="card"><h2>Pick your event</h2>${me}${S.events.length ? evSelect() : ''}<h3>Find your event</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${ebHTML()}<h3>Or paste an event code or link</h3>${importForm('')}<h3>Or create one by hand</h3>${manualForm()}</div>` + settingsCard();
   h += `<div class="card">${evSelect()}
-    <p class="mut meta">${sku ? 'From VEX Events · ' + esc(sku) + ' · <button class="link" data-act="reimport">Update now</button>' : 'Created by hand'}${e.link ? ` · <a href="${esc(e.link)}" target="_blank" rel="noopener">Event page ↗</a>` : ''} <span id="impmsg2"></span></p>
-    ${me}</div>`;
+    <p class="mut meta">${sku ? 'From VEX Events · ' + esc(sku) + ' · <button class="link" data-act="reimport">Update now</button>' : 'Created by hand'}${e.link ? ` · <a href="${esc(e.link)}" target="_blank" rel="noopener">Event page ↗</a>` : ''} <span id="impmsg2"></span></p></div>`;
   h += segBar([['list', 'Teams'], ['rank', 'Rankings'], ['skills', 'Skills'], ['more', 'More']], tv, 'tview');
   return h + ({ list: vTeamList, rank: vRank, skills: vSkills, more: vMore })[tv]();
 }
@@ -518,28 +543,63 @@ function vSkills() {
 // ---------- event browser: find an event on VEX Events instead of typing its code ----------
 // Results come from the server (/api/events). Typing filters them there (after a short pause); the list is painted
 // straight into #ebres so typing in the search box never fights with a full re-render.
-let EB = { scope: ls('ebs') || 'mine', q: '', list: null, total: 0, busy: false, err: '', msg: '' }, ebT, ebSeq = 0;
+let EB = { scope: ls('ebs') || 'mine', q: '', list: null, total: 0, busy: false, err: '', msg: '', f: { region: '', level: '', when: '', hide: false } }, ebT, ebSeq = 0;
+// Event lists are remembered for 10 minutes (per tab and search), so switching tabs or coming back is instant.
+const EBC = lsJ('ebc') || {}, EB_TTL = 10 * 60000;
+const ebKey = () => EB.scope + '|' + EB.q.trim().toLowerCase(), ebFresh = k => EBC[k] && Date.now() - EBC[k].t < EB_TTL;
+function ebStore(k, list, total) { EBC[k] = { t: Date.now(), list, total }; const ks = Object.keys(EBC); if (ks.length > 8) { ks.sort((a, b) => EBC[a].t - EBC[b].t); delete EBC[ks[0]] } lsJ('ebc', EBC) }
+const ebMatchQ = (list, q) => { const w = q.toLowerCase().split(/\s+/).filter(Boolean); return w.length ? list.filter(e => { const hay = [e.name, e.sku, e.city, e.region, e.country, e.venue].join(' ').toLowerCase(); return w.every(x => hay.includes(x)) }) : list };
+const ebDaysTo = d => d ? Math.round((new Date(String(d).slice(0, 10) + 'T12:00:00') - new Date(new Date().toDateString() + ' 12:00:00')) / 864e5) : null;
+function ebVisible() {
+  const f = EB.f, have = new Set(S.events.map(e => skuOf(e)));
+  return (EB.list || []).filter(e => {
+    if (f.region && e.region !== f.region) return false;
+    if (f.level && e.level !== f.level) return false;
+    if (f.hide && have.has(e.sku.toUpperCase())) return false;
+    if (f.when) { const d = ebDaysTo(e.start), tm = new Date(), sd = e.start ? new Date(String(e.start).slice(0, 10) + 'T12:00:00') : null;
+      if (d == null) return false;
+      if (f.when === 'n7' && !(d >= 0 && d <= 7)) return false;
+      if (f.when === 'n30' && !(d >= 0 && d <= 30)) return false;
+      if (f.when === 'l7' && !(d <= 0 && d >= -7)) return false;
+      if (f.when === 'l30' && !(d <= 0 && d >= -30)) return false;
+      if (f.when === 'tm' && !(sd && sd.getMonth() === tm.getMonth() && sd.getFullYear() === tm.getFullYear())) return false }
+    return true;
+  });
+}
+const ebFiltersOn = () => !!(EB.f.region || EB.f.level || EB.f.when || EB.f.hide);
+function ebFilters() {
+  const L = EB.list || [], uniq = fn => [...new Set(L.map(fn).filter(Boolean))].sort(), f = EB.f;
+  const when = EB.scope === 'past' ? [['', 'Any date'], ['l7', 'Last 7 days'], ['l30', 'Last 30 days'], ['tm', 'This month']] : [['', 'Any date'], ['n7', 'Next 7 days'], ['n30', 'Next 30 days'], ['tm', 'This month']];
+  return `<div class="ebfilters">${dd('ebreg', f.region, [['', 'Any region'], ...uniq(e => e.region).map(x => [x, x])], { label: 'Region', value: f.region })}${dd('eblvl', f.level, [['', 'Any level'], ...uniq(e => e.level).map(x => [x, x])], { label: 'Level', value: f.level })}${dd('ebwhen', f.when, when, { label: 'Date', value: f.when })}<button type="button" class="chip ${f.hide ? 'on' : ''}" data-act="ebhide" aria-pressed="${f.hide}">Hide added</button>${ebFiltersOn() ? '<button type="button" class="link" data-act="ebreset">Clear</button>' : ''}</div>`;
+}
 if (!['mine', 'soon', 'past'].includes(EB.scope)) EB.scope = 'mine';
 const ebDay = d => new Date(String(d).slice(0, 10) + 'T12:00:00');
 const ebDates = (a, b) => { if (!a) return ''; const f = d => ebDay(d).toLocaleDateString([], { day: 'numeric', month: 'short' }), x = f(a), y = b ? f(b) : x; return x === y ? x : x + ' – ' + y };
 function ebRows() {
   if (EB.err) return `<p class="err">${esc(EB.err)}</p>`;
-  if (!EB.list) return '';
-  if (!EB.list.length) return empty(EB.q ? 'No events match that.' : EB.scope === 'mine' ? 'No events found for your team this season yet. Try Coming up, or paste an event code below.' : 'No events found.');
+  if (!EB.list) return EB.busy ? `<div class="card list evlist skel" aria-hidden="true">${[0, 1, 2, 3].map(() => '<div class="trow evrow"><div class="grow"><div class="sk sk1"></div><div class="sk sk2"></div></div></div>').join('')}</div>` : '';
+  const vis = ebVisible();
+  if (!EB.list.length || !vis.length) return empty(ebFiltersOn() ? 'No events match those filters.' : EB.q ? 'No events match that.' : EB.scope === 'mine' ? 'No events found for your team this season yet. Try Coming up, or paste an event code below.' : 'No events found.');
   const have = new Map(S.events.map(e => [skuOf(e), e.id]));
-  return `<div class="card list evlist">${EB.list.map(e => {
+  return `<div class="card list evlist">${vis.map(e => {
     const place = [e.city, e.region, e.country].filter(Boolean).join(', '), got = have.has(e.sku.toUpperCase());
     return `<div class="trow evrow"><div class="grow"><div class="evn">${esc(e.name)}</div><div class="mut">${esc([ebDates(e.start, e.end), place, e.level].filter(Boolean).join(' · '))}</div><div class="mut evsku">${esc(e.sku)}</div></div>${got ? `<button data-act="evopen" data-sku="${esc(e.sku)}" aria-label="Open ${esc(e.name)}">Open</button>` : `<button data-act="evadd" data-sku="${esc(e.sku)}" aria-label="Add ${esc(e.name)}">Add</button>`}</div>`;
-  }).join('')}</div>${EB.total > EB.list.length ? `<p class="mut">Showing ${EB.list.length} of ${EB.total}. Type in the box to narrow it down.</p>` : ''}`;
+  }).join('')}</div>${vis.length !== EB.list.length ? `<p class="mut">${vis.length} of ${EB.list.length} match your filters.</p>` : ''}${EB.total > EB.list.length ? `<p class="mut">Showing ${EB.list.length} of ${EB.total}. Type in the box to narrow it down.</p>` : ''}`;
 }
 const ebMsgText = () => EB.msg || (EB.busy ? 'Searching VEX Events…' : '');
+const ebMsgCls = () => 'mut ebmsg' + (EB.busy ? ' busy' : '');
 const ebHTML = () => `<div id="eb">${segBar([['mine', 'Our events'], ['soon', 'Coming up'], ['past', 'Earlier']], EB.scope, 'ebscope')}
   <input id="ebq" type="search" value="${esc(EB.q)}" placeholder="Search by name, city, region or code…" aria-label="Search events" autocomplete="off" spellcheck="false">
-  <p class="mut ebmsg" id="ebmsg" role="status">${esc(ebMsgText())}</p><div id="ebres">${ebRows()}</div></div>`;
-function ebPaint() { const r = $('#ebres'), m = $('#ebmsg'); if (r) r.innerHTML = ebRows(); if (m) m.textContent = ebMsgText() }
-async function ebLoad() {
-  const seq = ++ebSeq; EB.busy = true; EB.err = ''; ebPaint();
-  try { const d = await api('/events', { scope: EB.scope, q: EB.q }); if (seq !== ebSeq) return; EB.list = d.events || []; EB.total = d.total || EB.list.length }
+  <div id="ebf">${ebFilters()}</div>
+  <p class="${ebMsgCls()}" id="ebmsg" role="status">${esc(ebMsgText())}</p><div id="ebres">${ebRows()}</div></div>`;
+function ebPaint() { const r = $('#ebres'), m = $('#ebmsg'), f = $('#ebf'); if (f) f.innerHTML = ebFilters(); if (r) r.innerHTML = ebRows(); if (m) { m.textContent = ebMsgText(); m.className = ebMsgCls() } }
+async function ebLoad(force) {
+  const k = ebKey(), baseK = EB.scope + '|', base = EBC[baseK];
+  // a whole list for this tab is already here: search it locally, no need to ask again
+  if (!force && EB.q.trim() && base && ebFresh(baseK) && base.total <= base.list.length) { ++ebSeq; EB.list = ebMatchQ(base.list, EB.q); EB.total = EB.list.length; EB.err = ''; EB.busy = false; ebPaint(); return }
+  if (!force && ebFresh(k)) { ++ebSeq; EB.list = EBC[k].list; EB.total = EBC[k].total; EB.err = ''; EB.busy = false; ebPaint(); return }
+  const seq = ++ebSeq; EB.busy = true; EB.err = ''; EB.list = null; ebPaint();
+  try { const d = await api('/events', { scope: EB.scope, q: EB.q }); if (seq !== ebSeq) return; EB.list = d.events || []; EB.total = d.total || EB.list.length; ebStore(k, EB.list, EB.total) }
   catch (e) { if (seq !== ebSeq) return; EB.list = []; EB.total = 0; EB.err = e instanceof NetErr ? 'Finding events needs a connection. You can still paste an event code below.' : e instanceof AuthErr ? '' : 'Couldn’t load events: ' + String(e.message || e).slice(0, 140) }
   EB.busy = false; ebPaint();
 }
@@ -553,7 +613,7 @@ function vMatches() {
   const all = matches(), list = mf === 'all' ? all : all.filter(m => side(m));
   const st = stats(), me = st.by.get(US), playedN = all.filter(m => side(m) && scored(m)).length;
   const rankChip = me && me.rank != null ? `<span class="hchip">Rank ${me.rank} of ${teams().length}</span>` : '';
-  let h = `<div class="homehero"><span class="hl">Our record</span>${me && (me.w + me.l + me.t) ? `<div class="hbig">${me.w}<small>– ${me.l} – ${me.t}</small></div><div class="hrow">${rankChip}${me.opr != null ? `<span class="hchip">OPR ${f1(me.opr)}</span>` : ''}</div>` : `<div class="hbig">–</div><p class="hnote">${playedN ? playedN + ' of our matches played.' : 'Your record shows up once qualification matches are scored.'}</p>`}</div>` +
+  let h = `<div class="homehero"><span class="hl">Our record</span>${me && (me.w + me.l + me.t) ? `<div class="hbig"><span data-count="${me.w}" data-ck="w">${me.w}</span><small>– ${me.l} – ${me.t}</small></div><div class="hrow">${rankChip}${me.opr != null ? `<span class="hchip">OPR ${f1(me.opr)}</span>` : ''}</div>` : `<div class="hbig">–</div><p class="hnote">${playedN ? playedN + ' of our matches played.' : 'Your record shows up once qualification matches are scored.'}</p>`}</div>` +
     segBar([['ours', 'Our matches'], ['all', 'All matches']], mf, 'mfilter');
   h += list.map(m => {
     const s = side(m), o = open[m.id], ours = mf !== 'all' && !!s; // Our matches: our alliance is always the left column, and the score reads us–them
@@ -617,7 +677,7 @@ function vScout() {
   const rel = n => { const a = [], o = []; ms.forEach(x => { const s = side(x, n); if (n === US || !s) return; (s === 'ally' ? a : o).push(x.label.replace(/^Mock /, '')) }); return { a, o } };
   const all = teams().filter(t => t.number !== US), mine = t => myScouts(t.number).length, left = all.filter(t => !mine(t)), show = sf === 'todo' ? left : all;
   const doneN = all.length - left.length;
-  return `<div class="homehero scouthero"><span class="hl">Teams scouted</span><div class="hbig">${doneN}<small>of ${all.length}</small></div><div class="sbar" role="progressbar" aria-valuenow="${doneN}" aria-valuemin="0" aria-valuemax="${all.length}"><i style="width:${all.length ? Math.round(100 * doneN / all.length) : 0}%"></i></div></div>
+  return `<div class="homehero scouthero"><span class="hl">Teams scouted</span><div class="hbig"><span data-count="${doneN}" data-ck="done">${doneN}</span><small>of ${all.length}</small></div><div class="sbar" role="progressbar" aria-valuenow="${doneN}" aria-valuemin="0" aria-valuemax="${all.length}"><i style="width:${all.length ? Math.round(100 * doneN / all.length) : 0}%"></i></div></div>
   <div class="scouthead"><span class="mut">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></span><span class="mut">${all.length - left.length} of ${all.length} done</span></div>
   ${segBar([['todo', 'To scout (' + left.length + ')'], ['all', 'All teams (' + all.length + ')']], sf, 'sfilter')}
   <p class="mut legend"><span class="mtag g">Q</span> plays with us <span class="mtag r">Q</span> plays against us</p>
@@ -703,7 +763,7 @@ const setPicks = p => upd('events', ev, { picks: p });
 // ask(): a confirm box. Both follow the theme, work with the keyboard and respect reduce-motion.
 const DDS = {};
 function dd(id, cur, options, o = {}) {
-  DDS[id] = { options, f: o.f };
+  DDS[id] = { options, f: o.f, value: o.value };
   const hit = options.find(x => x[0] === (cur || '')) || options[0], ph = !(cur || ''); 
   return `<button type="button" class="sel" id="${id}" data-act="dd" aria-haspopup="listbox" aria-expanded="false"${o.label ? ` aria-label="${esc(o.label)}"` : ''}><span class="sv ${ph && id !== 'evsel' ? 'ph' : ''}">${esc(hit ? hit[1] : '')}</span><span class="chev" aria-hidden="true">›</span></button>`;
 }
@@ -745,6 +805,7 @@ function ddPick(id, v, d) {
   if (id === 'evsel' && v === '+add') { tv = 'more'; ls('tv', tv); dState['d-more'] = true; render(); const el = $('#d-more'); if (el) el.scrollIntoView({ block: 'start' }) }
   else if (id === 'evsel') { ev = v; ls('ev', ev); render() }
   else if (id === 'scm') { flushDraft(); loadDraft(scTeam, v); render() }
+  else if (id === 'ebreg' || id === 'eblvl' || id === 'ebwhen') { EB.f[{ ebreg: 'region', eblvl: 'level', ebwhen: 'when' }[id]] = v; ebPaint() }
   else if (d.f && draft && tab === 'scout') { draft[d.f] = v; saveDraft(0); const el = $('#' + id); if (el) { const hit = d.options.find(x => x[0] === v) || d.options[0]; el.querySelector('.sv').textContent = hit[1]; el.querySelector('.sv').classList.toggle('ph', !v) } }
 }
 // team suggestions for the number boxes in the manual forms
@@ -810,7 +871,7 @@ document.addEventListener('click', e => {
   if (b.dataset.act === 'mpick') { pickMenu(+b.dataset.i); return }
   const a = b.dataset.act, v = id => $('#' + id)?.value?.trim() || '';
   const me = name || 'Someone';
-  if (a === 'tab') { flushDraft(); tab = b.dataset.v; ls('tab', tab); render() }
+  if (a === 'tab') { flushDraft(); const o = TABS.findIndex(t => t[0] === tab), n = TABS.findIndex(t => t[0] === b.dataset.v); navAnim = n > o ? 'fwd' : n < o ? 'back' : ''; tab = b.dataset.v; ls('tab', tab); render(); scrollTo({ top: 0, behavior: 'instant' }) }
   else if (a === 'login') {
     const t = norm(v('w_team')), c = $('#codein').value.trim();
     if (!t || !c) { loginErr = 'Enter your team number and team code.'; render(); return }
@@ -844,7 +905,9 @@ document.addEventListener('click', e => {
     const n = outbox.length, unsent = n ? n + (n === 1 ? ' change hasn’t' : ' changes haven’t') + ' been sent yet and will be lost. ' : '';
     ask('Log out of this device?', unsent + 'To get back in you need the team number and the team code (' + code + '). Make sure you have the code saved before you log out.', 'Log out').then(ok => { if (!ok) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; rkShown = ''; RK = null; EB.list = null; schedule(); render(); setStatus() })
   }
-  else if (a === 'ebscope') { EB.scope = b.dataset.v; ls('ebs', EB.scope); EB.list = null; EB.msg = ''; render(); clearTimeout(ebT); ebLoad() }
+  else if (a === 'ebscope') { EB.scope = b.dataset.v; ls('ebs', EB.scope); EB.msg = ''; EB.f.when = ''; clearTimeout(ebT); ebLoad(); render() }
+  else if (a === 'ebhide') { EB.f.hide = !EB.f.hide; ebPaint() }
+  else if (a === 'ebreset') { EB.f = { region: '', level: '', when: '', hide: false }; ebPaint() }
   else if (a === 'evadd') { b.disabled = true; doImport(b.dataset.sku, t => { EB.msg = t === 'Importing…' ? 'Adding ' + b.dataset.sku + '…' : t; ebPaint() }, () => { tv = 'list'; ls('tv', tv) }) }
   else if (a === 'evopen') { const id = String(b.dataset.sku).toLowerCase(); if (S.events.some(x => x.id === id)) { ev = id; ls('ev', ev); tv = 'list'; ls('tv', tv); render() } }
   else if (a === 'rcgo') {
@@ -863,6 +926,13 @@ document.addEventListener('click', e => {
   else if (a === 'close') closeModal();
   else if (a === 'addev') { const n = v('newev'); if (n) { const id = uid(); put('events', id, { name: n, link: '', picks: [] }); ev = id; ls('ev', id) } }
   else if (a === 'delev') { if (sure(b)) { send({ purge: ev }); ev = S.events[0] ? S.events[0].id : ''; ls('ev', ev) } }
+  else if (a === 'delname') {
+    if (!sure(b)) return; const n = b.dataset.v;
+    put('config', 'main', { ...cfg(), names: NAMES.filter(x => x !== n) });
+    if (name === n) { flushDraft(); scTeam = ''; draft = null; name = ''; ls('name', '') }
+    toast(n + ' was removed from the team'); render();
+  }
+  else if (a === 'addscout') { const n = v('newscout').replace(/\s+/g, ' ').slice(0, 30); if (!n) return; if (!NAMES.includes(n)) put('config', 'main', { ...cfg(), names: [...NAMES, n] }); toast(n + ' was added'); const i = $('#newscout'); i.value = ''; i.blur(); render() }
   else if (a === 'savecfg') { const names = [...new Set(v('cfg_names').split(',').map(s => s.trim()).filter(Boolean))]; put('config', 'main', { ...cfg(), names }); toast('Names saved') }
   else if (a === 'addteam') { const n = norm(v('t_n')); if (n) put('teams', ev + '_' + n, { eventId: ev, number: n, name: v('t_name'), school: v('t_s') }) }
   else if (a === 'delteam') { if (sure(b)) { del('teams', b.dataset.id); closeModal() } }
@@ -872,9 +942,11 @@ document.addEventListener('click', e => {
   }
   else if (a === 'delmatch') { if (sure(b)) del('matches', b.dataset.id) }
   else if (a === 'mopen') { const id = b.dataset.id; open[id] = !open[id]; justOpened = open[id] ? id : null; render() }
-  else if (a === 'sfilter') { sf = b.dataset.v; ls('sf', sf); render() }
-  else if (a === 'mfilter') { mf = b.dataset.v; ls('mf', mf); render() }
-  else if (a === 'tview') { tv = b.dataset.v; ls('tv', tv); render() }
+  else if (a === 'sfilter') { sf = b.dataset.v; ls('sf', sf); navAnim = 'up'; render() }
+  else if (a === 'mfilter') { mf = b.dataset.v; ls('mf', mf); navAnim = 'up'; render() }
+  else if (a === 'gorank') { tab = 'event'; ls('tab', tab); tv = 'rank'; ls('tv', tv); navAnim = 'fwd'; render(); const r = document.querySelector('#app tr.us'); if (r) setTimeout(() => { r.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); flash(r) }, 120) }
+  else if (a === 'gomatch') { const id = b.dataset.id; tab = 'matches'; ls('tab', tab); mf = 'ours'; ls('mf', mf); open[id] = true; justOpened = id; navAnim = 'fwd'; render(); const c = document.querySelector(`#app [data-act="mopen"][data-id="${id}"]`); if (c) setTimeout(() => { c.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); flash(c.closest('.card')) }, 120) }
+  else if (a === 'tview') { tv = b.dataset.v; ls('tv', tv); navAnim = 'up'; render() }
   else if (a === 'rksort') { rks = b.dataset.v; ls('rks', rks); render() }
   else if (a === 'sksope') { sks = b.dataset.v; ls('sks', sks); render() }
   else if (a === 'sksort') { sko = b.dataset.v; ls('sko', sko); render() }
@@ -889,12 +961,12 @@ document.addEventListener('click', e => {
   else if (a === 'clearnotes') { if (sure(b)) notes('team', b.dataset.t).forEach(n => del('notes', n.id)) }
   else if (a === 'clearscout') { if (sure(b)) { notes('scout', b.dataset.t).forEach(n => del('notes', n.id)); if (scTeam === b.dataset.t) { saveT = null; draft = null; scTeam = '' } } }
   else if (a === 'clearmatch') { if (sure(b)) notes('match', b.dataset.id).forEach(n => del('notes', n.id)) }
-  else if (a === 'startscout') { if (!name || b.dataset.t === US) return; flushDraft(); scTeam = b.dataset.t; loadDraft(scTeam, ''); render() }
+  else if (a === 'startscout') { if (!name || b.dataset.t === US) return; flushDraft(); scTeam = b.dataset.t; loadDraft(scTeam, ''); navAnim = 'fwd'; render() }
   else if (a === 'scoutfrom') { const t = b.dataset.t; flushDraft(); mTeam = null; tab = 'scout'; ls('tab', tab); if (name && t !== US) { scTeam = t; loadDraft(t, '') } else { scTeam = ''; draft = null } render() }
-  else if (a === 'donescout') { flushDraft(); scTeam = ''; draft = null; render() }
+  else if (a === 'donescout') { flushDraft(); scTeam = ''; draft = null; navAnim = 'back'; render() }
   else if (a === 'resetdraft') { if (sure(b)) { draft = { ...newDraft(scTeam, draft.match), id: draft.id }; saveDraft(0); lastView = ''; render() } }
   else if (a === 'setname') { flushDraft(); scTeam = ''; draft = null; name = b.dataset.v; ls('name', name); render() }
-  else if (a === 'theme') { ls('theme', (ls('theme') || 'light') === 'dark' ? 'light' : 'dark'); applyTheme() }
+  else if (a === 'theme') { ls('theme', (ls('theme') || osTheme()) === 'dark' ? 'light' : 'dark'); applyTheme() }
   else if (a === 'rate') { // update in place so the choice eases across instead of the whole form redrawing
     const f = b.dataset.f; draft[f] = draft[f] == +b.dataset.v ? 0 : +b.dataset.v;
     b.parentElement.querySelectorAll('button').forEach(x => { const on = +x.dataset.v === draft[f]; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) });
@@ -936,8 +1008,9 @@ document.addEventListener('pointerdown', e => {
   g.addEventListener('pointermove', mv); g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up)
 });
 document.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.tap[role=button]')) { e.preventDefault(); e.target.click(); return }
   if (e.key !== 'Enter') return;
-  const go = { codein: 'login', w_team: 'login', w_new: 'wlookup', w_rc: 'rcgo', w_rk: 'rcgo', myname: 'addname' }[e.target.id];
+  const go = { codein: 'login', w_team: 'login', w_new: 'wlookup', w_rc: 'rcgo', w_rk: 'rcgo', myname: 'addname', newscout: 'addscout' }[e.target.id];
   if (go) { e.preventDefault(); document.querySelector(`[data-act=${go}]`)?.click() }
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushDraft(); else if (code) { flush(); pull() } });
