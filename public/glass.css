@@ -190,3 +190,20 @@ nav button.on svg { transform: none; }
 .homehero::before { top: 14px; right: 14px; border-width: 2px 2px 0 0; border-radius: 0 4px 0 0; }
 .homehero::after { bottom: 14px; left: 14px; border-width: 0 0 2px 2px; border-radius: 0 0 0 4px; }
 .trow .num { background: var(--field); }
+
+/* ===== Telemetry: instrument-panel look. Quiet chrome; the richness is the data (dot-matrix OPR, big thin numbers) ===== */
+.homehero { background: radial-gradient(circle, color-mix(in oklch, var(--ink) 8%, transparent) 1px, transparent 1.3px) 0 0 / 14px 14px, var(--card); }
+.hviz { position: absolute; right: var(--s-6); top: 56px; display: grid; gap: 10px; justify-items: end; }
+.vcols { display: flex; gap: 5px; align-items: flex-end; height: 83px; }
+.vcol { display: flex; flex-direction: column-reverse; gap: 5px; }
+.vcol i { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in oklch, var(--ink) 34%, transparent); }
+.vcol.me i { background: var(--a); }
+.hviz span { font: 600 11px var(--font); color: var(--ink-muted); }
+#app.enter-fwd .vcol i, #app.enter-back .vcol i, #app.enter .vcol i { animation: dotIn .4s var(--ease) both; animation-delay: calc(var(--c) * 45ms); }
+@keyframes dotIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (max-width: 360px) { .hviz { display: none; } }
+@media (prefers-reduced-motion: reduce) { #app.enter-fwd .vcol i, #app.enter-back .vcol i, #app.enter .vcol i { animation: none !important; } }
+/* tab bar: the selected item is a lighter pill, icon in the accent */
+.navpill { background: var(--field); box-shadow: inset 0 0 0 1px var(--hair); }
+nav button.on { color: var(--ink); }
+nav button.on svg { stroke: var(--a); }

@@ -473,6 +473,14 @@ function evStatus(e, started, hasNext, played) {
   if (ds != null) return { cls: 'done', html: `Ended ${de === 0 ? 'today' : -de + (de === -1 ? ' day' : ' days') + ' ago'}` };
   return started && hasNext ? { cls: 'now', html: '<span class="livedot"></span>Event in progress' } : { cls: 'soon', html: played ? 'All our matches are played' : hasNext ? 'Matches are scheduled' : 'Waiting for the match schedule' };
 }
+// A dot-matrix of OPR for the top teams, ours lit in the accent: where we sit at a glance.
+function oprViz(st, me) {
+  const arr = [...st.by.entries()].filter(([, r]) => r && r.opr != null && isFinite(r.opr)).sort((a, b) => b[1].opr - a[1].opr);
+  if (arr.length < 3 || !me || me.opr == null) return '';
+  let top = arr.slice(0, 8); if (!top.some(([n]) => n === US)) top = [...top.slice(0, 7), [US, me]];
+  const max = Math.max(...top.map(([, r]) => r.opr), 1);
+  return `<div class="hviz" role="img" aria-label="OPR of the top ${top.length} teams, ours highlighted"><div class="vcols">${top.map(([n, r], c) => `<div class="vcol ${n === US ? 'me' : ''}" style="--c:${c}">${'<i></i>'.repeat(Math.max(1, Math.round(Math.max(0, r.opr) / max * 8)))}</div>`).join('')}</div><span>OPR · top ${top.length}</span></div>`;
+}
 // Home: a status line, our rank as the big number and the next match we play (the tab bar does the navigating).
 function vHome() {
   const e = evObj(); if (!e) return '';
@@ -490,7 +498,7 @@ function vHome() {
     <div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${s === col ? 'mine' : ''}"><span>${l}</span>${chips(next, arr)}</div>`).join('')}</div></div>`;
   }
   return `<div class="home"><div class="greet"><div><p class="live ${stat.cls}">${stat.html}</p><h1>${esc(name || US)}${name ? ' <button class="link namechg" data-act="setname" data-v="">Change</button>' : ''}</h1></div></div>
-  <div class="homehero tap" data-act="gorank" role="button" tabindex="0" aria-label="Open the rankings"><span class="hl">Our rank${st.official ? '' : ' (calculated)'}</span>${hero}${recent ? `<div class="hrecent"><span>Recent</span>${recent}</div>` : ''}</div>
+  <div class="homehero tap" data-act="gorank" role="button" tabindex="0" aria-label="Open the rankings"><span class="hl">Our rank${st.official ? '' : ' (calculated)'}</span>${hero}${oprViz(st, me)}${recent ? `<div class="hrecent"><span>Recent</span>${recent}</div>` : ''}</div>
   ${nx}</div>`;
 }
 
