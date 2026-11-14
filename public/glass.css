@@ -257,3 +257,27 @@ nav button.on { color: var(--ink); } nav button.on svg { stroke: currentColor; }
 .rdot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-muted); } .rdot.g { background: var(--good); } .rdot.y { background: var(--warn); } .rdot.r { background: var(--bad); }
 input, select, textarea { border-radius: var(--r-md); }
 @media (min-width: 860px) { .home { grid-template-columns: 1fr; } .panel { grid-template-columns: 1fr 1fr; } .phead { grid-column: 1 / -1; } }
+
+/* ===== Logo: bare viewfinder glyph + clean wordmark ===== */
+.brand { gap: var(--s-3); }
+.glyph { width: 34px; height: 34px; flex: none; color: var(--a); }
+.wordmark { font: 600 24px/1.1 var(--font); letter-spacing: -0.035em; color: var(--ink); }
+#evname { margin-top: 3px; }
+
+/* ===== No outlines: shapes are told apart by surface steps, not by lines (focus rings stay) ===== */
+.card, .card.us, .panel, .stat, .next, .homehero, nav, .seg, #sync, #theme, header, .trow, .tile, .vs .side, details.card, #modal > div, #menu { border-color: transparent; }
+button, input, select, textarea, .sel, .evpick .sel, .composer { border-color: transparent; }
+input, select, textarea, .sel, .evpick .sel { background: var(--sunken); }
+button { background: var(--field); }
+button.p, .composer.has button { background: var(--accent-fill); }
+.seg button, nav button, button.link, button.d, .ib { background: transparent; }
+.ib { background: var(--field); }
+.card.us { background: linear-gradient(180deg, color-mix(in oklch, var(--a) 9%, var(--card)), var(--card)); }
+.chip, .chip.gn, .chip.rd, .chip.me, .chip.on { border-color: transparent; background: var(--field); }
+.chip.gn { background: var(--success-soft); color: var(--success); } .chip.rd { background: var(--danger-soft); color: var(--danger); }
+.chip.me { background: var(--a); color: var(--on-accent); } .chip.on { background: var(--a-soft); color: var(--accent-text); }
+.hchip, .res, .mtag { border-color: transparent; }
+.vs .side { background: color-mix(in oklch, var(--ink) 4%, var(--card)); }
+.vs .side.r { background: color-mix(in oklch, var(--alliance-red, var(--red)) 14%, var(--card)); } .vs .side.b { background: color-mix(in oklch, var(--alliance-blue, var(--blue)) 14%, var(--card)); }
+.vs .side.mine { border-color: transparent; box-shadow: none; }
+.vs .side.r.mine { background: color-mix(in oklch, var(--alliance-red, var(--red)) 26%, var(--card)); } .vs .side.b.mine { background: color-mix(in oklch, var(--alliance-blue, var(--blue)) 26%, var(--card)); }
