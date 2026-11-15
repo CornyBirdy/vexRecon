@@ -6,6 +6,8 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-15: Spectator mode, match times and fields
+
 ### Fixed
 - **The bottom bar no longer wanders around the screen on iPhone while you scroll.** The page itself was set to clip sideways overflow, which iPhone Safari applies to the whole screen and which made the fixed tab bar drift. The clipping now happens on the app column only (the page-to-page slide looks the same), and the bar sits on its own layer pinned to the bottom. This was found from a screen recording and fixed without an iPhone to test on, so it needs checking on one.
 
