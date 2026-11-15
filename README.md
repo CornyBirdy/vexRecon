@@ -30,6 +30,7 @@ without a key (set up before keys existed) make one in Team settings → Recover
 can reset the code (see Admin).
 
 ## What's in it
+- **Agenda**: on the Event home, the day's schedule as a timeline with a **Now** marker (registration, inspection, matches begin ...). The team types it in (Add / Edit on the card); it's shared live, works offline and spectators can read it. Stored on the event as `agenda`.
 - **Matches**: your matches or all of them, when each is scheduled and which field it's on, scores, W/L, and strategy / partner / opposition notes per match.
 - **Event tab**: one place for the event. The picker sits on top, then **Teams** (searchable, with rank, skills and OPR on
   each row), **Rankings**, **Skills** and **More** (event notes, import another event, team settings).

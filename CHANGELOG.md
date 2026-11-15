@@ -7,10 +7,12 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ## [Unreleased]
 
 ### Added
+- **Agenda.** The Event home now has an **Agenda** card: the day's schedule as a timeline (registration, inspection, opening ceremony, matches begin, lunch, awards...) with a **Now** marker on whatever is happening, and finished items dimmed. Tap **Add** (or **Edit**) to fill it in: pick the day and time, then type what happens or choose a suggestion, with an optional note. It's shared live with your whole team, works offline, and spectators can see it too (they can't change it). Multi-day events list each day. VEX Events doesn't give us the agenda, so your team types it in once.
 - **Robot photos.** When you scout a team, the **Robot** section of the scouting form has **Take photo** and **From gallery** buttons, so you can add a picture of their robot as you scout. The same photos also show on the team's page, in a new **Robot photos** card. Up to 3 photos per team per event, shared with your whole team. Tap a photo to see it full size; the × deletes it (needs a connection). Photos are shrunk on the phone first (a 5 MB picture becomes about 180 KB), so they use very little of the free database space. With no signal a photo waits on the phone ("Waiting to send") and uploads when you're back online. Spectators never see them.
 - **Photos clear themselves.** A team keeps photos for its **5 most recent events**; when a sixth event is added, the oldest event's photos are removed. Deleting an event removes its photos too.
 
 ### Changed
+- **The awkward gap under the event bar on the Event home is gone.** The greeting ("Live now", your name) now sits snug under it, about the same spacing as the other tabs.
 - **Match times now show in your own local time.** They used to show the venue's clock; now a match scheduled for 9:30 am at the venue shows as the same moment on your device's clock, matching the status pill and every other time in the app.
 - **The picklist's "Still to pick" teams now show their team name under the number**, so you can tell who's who without opening each team.
 
