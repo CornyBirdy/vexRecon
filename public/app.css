@@ -281,3 +281,4 @@ button.dng:hover{background:color-mix(in srgb,var(--danger),var(--ink) var(--tin
 .mrel{font-size:13px;margin:0 var(--s-3) var(--s-2)}.mteam{padding:var(--s-3)}
 body.out #sync{display:none}
 .trow .avatar{width:32px;height:32px;border-radius:var(--r-md);display:grid;place-items:center;background:var(--accent-soft,var(--sunken));font-weight:700;flex:none}
+.chg{margin:var(--s-2) 0 0;padding-left:var(--s-5)}.chg li{margin:var(--s-2) 0}.quiet{text-align:center;margin:var(--s-4) 0 0}

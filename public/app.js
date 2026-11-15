@@ -444,7 +444,7 @@ function render() {
   if (!same) for (const k in lastCounts) delete lastCounts[k];
   lastView = key; justOpened = null; countUp();
   const md = $('#modal');
-  $('#mbody').innerHTML = mTeam === ':about' ? vAbout() : mTeam ? vTeam(mTeam) : '';
+  $('#mbody').innerHTML = mTeam === ':about' ? vAbout() : mTeam === ':changes' ? vChanges() : mTeam ? vTeam(mTeam) : '';
   if (mTeam && !modalShown) { md.style.display = 'block'; if (!reduced()) replay(md, 'opening') }
   else if (!mTeam) md.style.display = 'none';
   modalShown = !!mTeam;
@@ -510,7 +510,22 @@ const settingsCard = () => `<details class="card" id="d-settings" ${det('d-setti
   <h3>Scouts</h3><div class="scouts">${NAMES.map(n => `<div class="srow"><span class="avatar">${esc((n[0] || '?').toUpperCase())}</span><span class="grow">${esc(n)}${n === name ? ' <span class="mut">(you)</span>' : ''}</span><button class="d" data-act="delname" data-v="${esc(n)}">Remove</button></div>`).join('') || '<p class="mut">Names show up here as people join.</p>'}</div>
   <div class="row"><input id="newscout" placeholder="Add a scout" autocomplete="off" aria-label="Add a scout"><button data-act="addscout">Add</button></div>
   ${installRow()}
-  <div class="foot"><button class="link" data-act="about">About Recon</button><span class="grow"></span><button class="d" data-act="logout">Log out</button></div></details>`;
+  <div class="foot"><span class="grow"></span><button class="d" data-act="logout">Log out</button></div></details>`;
+// What's new, in plain words (the full history is CHANGELOG.md). Newest first; add a line here when something users will notice changes.
+const CHANGES = [
+  ['Latest', [
+    'Matches has a new By team view: who a team plays with and against, and their record.',
+    'Scouting is shared: the Scout list shows who scouted each team, and a Team activity list shows who did what and when.',
+    'Claim a team ("I’ll scout this") so two people don’t scout the same one.',
+    'Find an event with filters for region, level and date.',
+    'Remove a scout from Team settings.',
+    'A new Event Home: your rank, record and next match at a glance.',
+    'Recovery key for teams, so a lost team code can be replaced.']],
+  ['1.0.0', ['The first Recon release: match notes, scouting forms, rankings, OPR and a finals picklist, shared live and working offline.']]];
+function vChanges() {
+  return `<div class="sheethead"><div class="grow"><h2>What’s new</h2></div><button data-act="close">Close</button></div>` +
+    CHANGES.map(([v, l]) => `<div class="card"><h2>${esc(v)}</h2><ul class="chg">${l.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('');
+}
 const whoCard = (title, text) => `<div class="card"><h2>${title}</h2><p class="mut">${text}</p>${nameChips()}<div class="row"><input id="myname" placeholder="${NAMES.length ? 'Not listed? Type your name' : 'Your name'}" autocomplete="given-name" aria-label="Your name"><button data-act="addname">That’s me</button></div></div>`;
 function vAbout() {
   return `<div class="sheethead"><div class="grow"><h2>About Recon</h2></div><button data-act="close">Close</button></div>
@@ -601,6 +616,7 @@ function vMore() {
   <details class="card" id="d-more" ${det('d-more', false)}><summary><h2>Add another event</h2></summary><h3>Find an event</h3>${ebHTML()}<h3>Or paste an event code or link</h3>${importForm('')}<h3>Or create one by hand</h3>${manualForm()}</details>
   ${sku ? '' : `<details class="card" id="d-link" ${det('d-link', false)}><summary><h2>Event link</h2></summary><input id="evlink" value="${esc(e.link || '')}" placeholder="Paste the VEX event link here" aria-label="Event link"></details>`}
   ${settingsCard()}
+  <p class="mut fine quiet"><button class="link" data-act="about">About Recon</button> · <button class="link" data-act="changes">What’s new</button></p>
   <div class="foot"><button class="d" data-act="delev">Delete this event and all its notes</button></div>`;
 }
 
@@ -1036,6 +1052,7 @@ document.addEventListener('click', e => {
   else if (a === 'rotate') { if (sure(b)) api('/rotate', {}).then(d => { code = d.code; ls('code', code); render(); const c = $('#codeval'); if (c) { c.textContent = code; c.dataset.shown = '1' } toast('New team code: ' + code + '. The old one no longer works, so share this one.') }).catch(e => toast('Couldn’t make a new code: ' + e.message)) }
   else if (a === 'install') { if (installEvt) { installEvt.prompt(); installEvt.userChoice.finally(() => { installEvt = null; render() }) } }
   else if (a === 'about') { mTeam = ':about'; render() }
+  else if (a === 'changes') { mTeam = ':changes'; render() }
   else if (a === 'addname') {
     const n = v('myname').replace(/\s+/g, ' ').slice(0, 30); if (!n) return;
     if (!NAMES.includes(n)) put('config', 'main', { ...cfg(), names: [...NAMES, n] });
