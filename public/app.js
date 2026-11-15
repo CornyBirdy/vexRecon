@@ -31,15 +31,14 @@ const tName = n => { const t = teams().find(t => t.number === n); return t ? t.n
 const side = (m, n) => { const us = m.red.includes(US) ? 'red' : m.blue.includes(US) ? 'blue' : null; if (!us) return ''; if (!n) return us; const mine = m[us]; return mine.includes(n) ? 'ally' : (m.red.includes(n) || m.blue.includes(n)) ? 'opp' : '' };
 const cls = (m, n) => { if (n === US) return ''; const s = side(m, n); return s === 'ally' ? 'gn' : s === 'opp' ? 'rd' : '' };
 const scored = m => m.rs != null && (m.rs || m.bs);
-// When and where a match is played: "Sat 9:30 am · Field 2". VEX Events gives the time with the venue's own UTC offset, so the clock
-// reading is taken straight from it (a spectator in another time zone sees the venue's time, which is the one that matters).
+// When and where a match is played: "Sat 9:30 am · Field 2". VEX Events gives the time with the venue's UTC offset, so it is a real
+// moment in time and is shown in this device's own time zone, like every other time in the app.
 function whenOf(m) {
-  const t = String(m.sched || m.ran || ''), p = t.match(/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/), e = evObj();
+  const t = String(m.sched || m.ran || ''), d = t ? new Date(t) : null, e = evObj();
   let at = '';
-  if (p) {
-    const d = new Date(Date.UTC(+p[1], +p[2] - 1, +p[3], +p[4], +p[5]));
-    at = d.toLocaleTimeString([], { timeZone: 'UTC', hour: 'numeric', minute: '2-digit' });
-    if (e && e.end && String(e.end).slice(0, 10) !== String(e.start || '').slice(0, 10)) at = d.toLocaleDateString([], { timeZone: 'UTC', weekday: 'short' }) + ' ' + at; // a multi-day event: say which day
+  if (d && !isNaN(d)) {
+    at = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (e && e.end && String(e.end).slice(0, 10) !== String(e.start || '').slice(0, 10)) at = d.toLocaleDateString([], { weekday: 'short' }) + ' ' + at; // a multi-day event: say which day
   }
   const f = String(m.field || '').trim();
   return [at, f ? (/^\d+$/.test(f) ? 'Field ' + f : f) : ''].filter(Boolean).join(' · ');

@@ -7,6 +7,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ## [Unreleased]
 
 ### Changed
+- **Match times now show in your own local time.** They used to show the venue's clock; now a match scheduled for 9:30 am at the venue shows as the same moment on your device's clock, matching the status pill and every other time in the app.
 - **The picklist's "Still to pick" teams now show their team name under the number**, so you can tell who's who without opening each team.
 
 ## [1.1.0] - 2026-11-15: Spectator mode, match times and fields
