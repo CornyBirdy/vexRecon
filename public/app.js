@@ -31,14 +31,16 @@ const tName = n => { const t = teams().find(t => t.number === n); return t ? t.n
 const side = (m, n) => { const us = m.red.includes(US) ? 'red' : m.blue.includes(US) ? 'blue' : null; if (!us) return ''; if (!n) return us; const mine = m[us]; return mine.includes(n) ? 'ally' : (m.red.includes(n) || m.blue.includes(n)) ? 'opp' : '' };
 const cls = (m, n) => { if (n === US) return ''; const s = side(m, n); return s === 'ally' ? 'gn' : s === 'opp' ? 'rd' : '' };
 const scored = m => m.rs != null && (m.rs || m.bs);
-// When and where a match is played: "Sat 9:30 am · Field 2". VEX Events gives the time with the venue's UTC offset, so it is a real
-// moment in time and is shown in this device's own time zone, like every other time in the app.
+// When and where a match is played: "Sat 9:30 am · Field 2". VEX Events lists the time as the clock at the venue (plus a UTC offset
+// that isn't always right for the event: one event's offset put Q1 eight hours out), so the clock reading is used as it is and no
+// time-zone conversion is done. Everyone at the event, and spectators watching it, see the venue's clock.
 function whenOf(m) {
-  const t = String(m.sched || m.ran || ''), d = t ? new Date(t) : null, e = evObj();
+  const t = String(m.sched || m.ran || ''), p = t.match(/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/), e = evObj();
   let at = '';
-  if (d && !isNaN(d)) {
-    at = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    if (e && e.end && String(e.end).slice(0, 10) !== String(e.start || '').slice(0, 10)) at = d.toLocaleDateString([], { weekday: 'short' }) + ' ' + at; // a multi-day event: say which day
+  if (p) {
+    const d = new Date(Date.UTC(+p[1], +p[2] - 1, +p[3], +p[4], +p[5]));
+    at = d.toLocaleTimeString([], { timeZone: 'UTC', hour: 'numeric', minute: '2-digit' });
+    if (e && e.end && String(e.end).slice(0, 10) !== String(e.start || '').slice(0, 10)) at = d.toLocaleDateString([], { timeZone: 'UTC', weekday: 'short' }) + ' ' + at; // a multi-day event: say which day
   }
   const f = String(m.field || '').trim();
   return [at, f ? (/^\d+$/.test(f) ? 'Field ' + f : f) : ''].filter(Boolean).join(' · ');
@@ -825,14 +827,16 @@ async function ebLoad(force) {
 function ebKick() { const el = $('#eb'); if (el && !el.closest('details:not([open])') && EB.list === null && !EB.busy && code && !spec) ebLoad() }
 function filt(q) { q = q.toLowerCase(); document.querySelectorAll('#tl2 .trow').forEach(c => c.style.display = c.dataset.q.includes(q) ? '' : 'none') }
 
-const chips = (m, arr) => arr.map(n => `<button class="chip ${n === US ? 'me' : cls(m, n)}" data-act="team" data-t="${n}">${n}</button>`).join('');
+let mnames = ls('mnames') === '1'; // show each team's name under its number on match cards
+const chips = (m, arr) => arr.map(n => { const nm = mnames ? tName(n) : ''; return `<button class="chip ${nm ? 'nm ' : ''}${n === US ? 'me' : cls(m, n)}" data-act="team" data-t="${n}">${n}${nm ? `<small>${esc(nm)}</small>` : ''}</button>` }).join('');
 function vMatches() {
   if (!evObj()) return empty('Pick an event first.');
   const all = matches(), inT = m => m.red.includes(mfT) || m.blue.includes(mfT), list = mf === 'all' ? all : mf === 'team' ? (mfT ? all.filter(inT) : []) : all.filter(m => side(m));
   const st = stats(), me = st.by.get(US), playedN = all.filter(m => side(m) && scored(m)).length;
   const rankChip = me && me.rank != null ? `<span class="hchip">Rank ${me.rank} of ${teams().length}</span>` : '';
   let h = `<section class="panel">${recStat(all.filter(m => side(m)))}</section>` +
-    segBar([['ours', spec ? US : 'Our matches'], ['all', 'All matches'], ['team', 'By team']], mf, 'mfilter');
+    segBar([['ours', spec ? US : 'Our matches'], ['all', 'All matches'], ['team', 'By team']], mf, 'mfilter') +
+    `<div class="mtools"><button class="chip ${mnames ? 'on' : ''}" data-act="mnames" aria-pressed="${mnames}">Team names</button></div>`;
   let tw = 0, tl = 0, tt = 0;
   if (mf === 'team') {
     h += `<div class="card mteam">${dd('mft', mfT, [['', 'Pick a team…'], ...teams().map(t => [t.number, t.number + ' · ' + t.name])], { value: mfT, label: 'Team to show matches for' })}</div>`;
@@ -1287,6 +1291,7 @@ document.addEventListener('click', e => {
   else if (a === 'import') doImport(v('sku'), sayIn('impmsg'));
   else if (a === 'reimport') { if (spec) { const s = skuOf(evObj()), say = sayIn('impmsg2'); say('Checking…'); api('/import', { sku: s, light: true }).then(() => pull()).then(() => say('')).catch(e => say('Couldn’t check: ' + String(e.message || e).slice(0, 100))) } else doImport(skuOf(evObj()), sayIn('impmsg2')) }
   else if (a === 'team') { mTeam = b.dataset.t; render() }
+  else if (a === 'mnames') { mnames = !mnames; ls('mnames', mnames ? '1' : '0'); render() }
   else if (a === 'agedit') { agEdit = !agEdit; render() }
   else if (a === 'agadd') {
     const d = v('ag_d'), t = v('ag_t'), x = v('ag_x'), n = v('ag_n'), e = evObj(), cur = Array.isArray(e.agenda) ? e.agenda : [];
