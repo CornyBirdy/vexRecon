@@ -271,15 +271,15 @@ button { background: var(--field); }
 button.p, .composer.has button { background: var(--accent-fill); }
 .seg button, nav button, button.link, button.d, .ib { background: transparent; }
 .ib { background: var(--field); }
-.card.us { background: linear-gradient(180deg, color-mix(in oklch, var(--a) 9%, var(--card)), var(--card)); }
+.card.us { background: linear-gradient(180deg, color-mix(in oklab, var(--ink) 8%, var(--card)), color-mix(in oklab, var(--ink) 3%, var(--card))); }
 .chip, .chip.gn, .chip.rd, .chip.me, .chip.on { border-color: transparent; background: var(--field); }
 .chip.gn { background: var(--success-soft); color: var(--success); } .chip.rd { background: var(--danger-soft); color: var(--danger); }
 .chip.me { background: var(--a); color: var(--on-accent); } .chip.on { background: var(--a-soft); color: var(--accent-text); }
 .hchip, .res, .mtag { border-color: transparent; }
-.vs .side { background: color-mix(in oklch, var(--ink) 4%, var(--card)); }
-.vs .side.r { background: color-mix(in oklch, var(--alliance-red, var(--red)) 14%, var(--card)); } .vs .side.b { background: color-mix(in oklch, var(--alliance-blue, var(--blue)) 14%, var(--card)); }
+.vs .side { background: color-mix(in oklab, var(--ink) 4%, var(--card)); }
+.vs .side.r { background: color-mix(in oklab, var(--alliance-red, var(--red)) 14%, var(--card)); } .vs .side.b { background: color-mix(in oklab, var(--alliance-blue, var(--blue)) 14%, var(--card)); }
 .vs .side.mine { border-color: transparent; box-shadow: none; }
-.vs .side.r.mine { background: color-mix(in oklch, var(--alliance-red, var(--red)) 26%, var(--card)); } .vs .side.b.mine { background: color-mix(in oklch, var(--alliance-blue, var(--blue)) 26%, var(--card)); }
+.vs .side.r.mine { background: color-mix(in oklab, var(--alliance-red, var(--red)) 26%, var(--card)); } .vs .side.b.mine { background: color-mix(in oklab, var(--alliance-blue, var(--blue)) 26%, var(--card)); }
 
 /* ================= Glass controls ================= */
 button:where(:not(.link):not(.d):not(.p):not(.chip):not(.sel):not(.mi)), .ib, #theme, .segpill { background: var(--g-fill), var(--field); box-shadow: var(--g-edge), var(--g-drop); -webkit-backdrop-filter: blur(var(--blur-ctl)) saturate(1.5); backdrop-filter: blur(var(--blur-ctl)) saturate(1.5); }
@@ -289,3 +289,5 @@ button.p, .composer.has button { background: linear-gradient(160deg, color-mix(i
 nav { background: var(--g-fill), var(--g-bar); box-shadow: var(--g-edge), 0 14px 34px -14px var(--shadow-c); -webkit-backdrop-filter: blur(var(--blur-ctl)) saturate(1.5); backdrop-filter: blur(var(--blur-ctl)) saturate(1.5); }
 .navpill { background: var(--g-fill); box-shadow: var(--g-edge); }
 #sync { background: var(--sunken); }
+
+.wordmark { line-height: 0; }
