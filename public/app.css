@@ -282,3 +282,7 @@ button.dng:hover{background:color-mix(in srgb,var(--danger),var(--ink) var(--tin
 body.out #sync{display:none}
 .trow .avatar{width:32px;height:32px;border-radius:var(--r-md);display:grid;place-items:center;background:var(--accent-soft,var(--sunken));font-weight:700;flex:none}
 .chg{margin:var(--s-2) 0 0;padding-left:var(--s-5)}.chg li{margin:var(--s-2) 0}.quiet{text-align:center;margin:var(--s-4) 0 0}
+.ebfilters{align-items:center}.ebfilters .ebpanel{flex:1 1 100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--s-3);padding:var(--s-3) 0 var(--s-1)}
+.ebf{display:flex;flex-direction:column;gap:var(--s-1)}.ebf label{font-size:13px;font-weight:600;color:var(--ink-muted)}.ebf .sel{width:100%;flex:none}
+.ebfilters .chip .chev{display:inline-block;transform:rotate(90deg)}.ebfilters .chip .chev.up{transform:rotate(-90deg)}.ebx{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ebfilters .ebf .sel{flex:0 0 auto;width:100%;min-width:0}

@@ -7,6 +7,8 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ## [Unreleased]
 
 ### Changed
+- **Event filters no longer cut off their text.** The row of small dropdowns is now one **Filters** button that opens a panel with each filter full-width and labelled. Active filters show as chips you can tap to remove.
+- **Fixed the sign-in card blinking.** On the welcome screen the card (team number, code, Open) could vanish for a moment and fade back in while you were typing. It now only animates in the first time.
 - **Better event filters.** The event finder now filters by **country**, then **state / region** (only the ones in that country, so South Australia no longer sits next to Thailand), then **city**. Picking a state fills in its country, and each box only appears when there's something to choose.
 - **About Recon moved out of Team settings** to a quiet link at the bottom of the More page, next to a new **What’s new** link that lists recent changes in plain words.
 - The sign-in screen no longer shows an empty status dot next to the light/dark button.

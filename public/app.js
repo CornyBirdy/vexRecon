@@ -401,7 +401,8 @@ window.addEventListener('resize', () => segPlace());
 function render() {
   if (dragging) { dirty = true; return }
   document.body.classList.toggle('out', !code);
-  if (!code) { $('#nav').innerHTML = ''; const sb = segSnap(); $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Welcome'; $('#evbar').innerHTML = ''; if (sb.wmode) $('#app .welcome')?.classList.add('swap'); segPlace(sb); lastView = ''; return }
+  // the welcome entrance animation only plays the first time it appears, not on every re-render (it made the card blink out and fade back in)
+  if (!code) { $('#nav').innerHTML = ''; const sb = segSnap(), shown = !!$('#app .welcome'); $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Welcome'; $('#evbar').innerHTML = ''; if (sb.wmode || shown) $('#app .welcome')?.classList.add('swap'); segPlace(sb); lastView = ''; return }
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) || menuFor) { dirty = true; return }
   dirty = false;
   US = norm(team);
@@ -711,7 +712,19 @@ function ebFilters() {
   const inC = L.filter(e => !f.country || e.country === f.country), countries = uniq(e => e.country);
   const regs = [...new Map(inC.filter(e => e.region).map(e => [ebReg(e), f.country || !e.country ? e.region : e.region + ', ' + e.country])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const cities = uniq(e => e.city && (!f.country || e.country === f.country) && (!f.region || ebReg(e) === f.region) ? e.city : '');
-  return `<div class="ebfilters">${countries.length > 1 || f.country ? dd('ebcty', f.country, [['', 'Any country'], ...countries.map(x => [x, x])], { label: 'Country', value: f.country }) : ''}${regs.length > 1 || f.region ? dd('ebreg', f.region, [['', 'Any state / region'], ...regs], { label: 'State or region', value: f.region }) : ''}${cities.length > 1 || f.city ? dd('ebcity', f.city, [['', 'Any city'], ...cities.map(x => [x, x])], { label: 'City', value: f.city }) : ''}${dd('eblvl', f.level, [['', 'Any level'], ...uniq(e => e.level).map(x => [x, x])], { label: 'Level', value: f.level })}${dd('ebwhen', f.when, when, { label: 'Date', value: f.when })}<button type="button" class="chip ${f.hide ? 'on' : ''}" data-act="ebhide" aria-pressed="${f.hide}">Hide added</button>${ebFiltersOn() ? '<button type="button" class="link" data-act="ebreset">Clear</button>' : ''}</div>`;
+  const lvl = uniq(e => e.level), nm = EB.f;
+  const sel = (id, label, cur, options) => `<div class="ebf"><label for="${id}" id="l_${id}">${label}</label>${dd(id, cur, options, { label, value: cur })}</div>`;
+  const show = {
+    country: countries.length > 1 || f.country, region: regs.length > 1 || f.region, city: cities.length > 1 || f.city, level: lvl.length > 1 || f.level
+  };
+  const chipTxt = { country: f.country, region: (regs.find(r => r[0] === f.region) || [0, ''])[1], city: f.city, level: f.level, when: (when.find(w => w[0] === f.when) || [0, ''])[1] };
+  const active = ['country', 'region', 'city', 'level', 'when'].filter(k => f[k]);
+  const n = active.length;
+  return `<div class="ebfilters"><button type="button" class="chip ${EB.fo ? 'on' : ''}" data-act="ebfopen" aria-expanded="${!!EB.fo}">Filters${n ? ' · ' + n : ''} <span class="chev ${EB.fo ? 'up' : ''}" aria-hidden="true">›</span></button>` +
+    `<button type="button" class="chip ${f.hide ? 'on' : ''}" data-act="ebhide" aria-pressed="${f.hide}">Hide added</button>` +
+    active.map(k => `<button type="button" class="chip on ebx" data-act="ebclr" data-k="${k}" aria-label="Remove filter ${esc(chipTxt[k])}">${esc(chipTxt[k])} <span aria-hidden="true">×</span></button>`).join('') +
+    (ebFiltersOn() ? '<button type="button" class="link" data-act="ebreset">Clear all</button>' : '') +
+    (EB.fo ? `<div class="ebpanel">${show.country ? sel('ebcty', 'Country', f.country, [['', 'Any country'], ...countries.map(x => [x, x])]) : ''}${show.region ? sel('ebreg', 'State / region', f.region, [['', 'Any state / region'], ...regs]) : ''}${show.city ? sel('ebcity', 'City', f.city, [['', 'Any city'], ...cities.map(x => [x, x])]) : ''}${show.level ? sel('eblvl', 'Level', f.level, [['', 'Any level'], ...lvl.map(x => [x, x])]) : ''}${sel('ebwhen', 'Date', f.when, when)}</div>` : '') + `</div>`;
 }
 if (!['mine', 'soon', 'past'].includes(EB.scope)) EB.scope = 'mine';
 const ebDay = d => new Date(String(d).slice(0, 10) + 'T12:00:00');
@@ -1074,6 +1087,8 @@ document.addEventListener('click', e => {
     ask('Log out of this device?', unsent + 'To get back in you need the team number and the team code (' + code + '). Make sure you have the code saved before you log out.', 'Log out').then(ok => { if (!ok) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; rkShown = ''; RK = null; EB.list = null; schedule(); render(); setStatus() })
   }
   else if (a === 'ebscope') { EB.scope = b.dataset.v; ls('ebs', EB.scope); EB.msg = ''; EB.f.when = ''; clearTimeout(ebT); ebLoad(); render() }
+  else if (a === 'ebfopen') { EB.fo = !EB.fo; ebPaint() }
+  else if (a === 'ebclr') { const k = b.dataset.k; EB.f[k] = ''; if (k === 'country') { EB.f.region = ''; EB.f.city = '' } if (k === 'region') EB.f.city = ''; ebPaint() }
   else if (a === 'ebhide') { EB.f.hide = !EB.f.hide; ebPaint() }
   else if (a === 'ebreset') { EB.f = { country: '', region: '', city: '', level: '', when: '', hide: false }; ebPaint() }
   else if (a === 'evadd') { b.disabled = true; doImport(b.dataset.sku, t => { EB.msg = t === 'Importing…' ? 'Adding ' + b.dataset.sku + '…' : t; ebPaint() }, () => { tv = 'list'; ls('tv', tv) }) }
