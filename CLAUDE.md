@@ -36,7 +36,13 @@ function also holds the RobotEvents key. Preview locally with `npm run dev` (see
   source (it switches light/dark with the browser, for the tab icon); `icon-light.svg` / `icon-dark.svg` are static copies the header swaps with the app's own theme; PNGs, maskable icons and `favicon.ico` are rendered from it (`icon-32-light.png` is the light-tab favicon).
 
 ## Before you push
-- Add what changed (in plain words, as the user would notice it) to `CHANGELOG.md` under **Unreleased**. Change
-  `APP.version` in `public/app.js` and cut a new heading only when the owner asks for a release.
+- Add what changed (in plain words, as the user would notice it) to `CHANGELOG.md` under **Unreleased**.
+- **Releases are yours to manage** (the owner has limited deploys, so don't release on every push). Keep working on
+  `beta` under **Unreleased**. When the owner asks to put work on `main` (which is what deploys), cut the release in the
+  same change: pick the next version, change `APP.version` in `public/app.js`, turn **Unreleased** into a dated heading
+  in `CHANGELOG.md` (and start a fresh empty **Unreleased**), and update the What's new list (`CHANGES` in `public/app.js`).
+  Versioning: patch (1.0.1) for fixes and small tweaks, minor (1.1.0) for new features, major (2.0.0) for a big change
+  such as moving host or breaking data. Tell the owner the number you chose. If a push to `main` is only a fix the owner
+  wants out now, a patch release is fine.
 - Test in a real browser (Playwright is available) with the API mocked or the function run in-process, in both
   light and dark mode, and check text contrast stays at 4.5:1 or better.
