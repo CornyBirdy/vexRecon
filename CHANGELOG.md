@@ -7,6 +7,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ## [Unreleased]
 
 ### Changed
+- **The header no longer overlaps the logo on narrower or busier screens.** The logo keeps its space, and on screens under about 480 px wide the status pill shows just the time ("5:38 pm") instead of "Synced 5:38 pm". The time no longer has a leading zero.
 - Closing the filter panel no longer snaps back for a moment at the end, and the sign-in card no longer fades in at all (it just appears with the logo animating in), so it can't blink.
 - **The filter panel eases open and closed** instead of snapping.
 - **Event filters no longer cut off their text.** The row of small dropdowns is now one **Filters** button that opens a panel with each filter full-width and labelled. Active filters show as chips you can tap to remove.
@@ -18,6 +19,11 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 - Phones now check for teammates' changes every 10 seconds instead of every 3.
 
 ### Added
+- **Dibs.** Each team on the Scout list has a **Dibs** button (replacing "I'll scout this" in the form): tap it and everyone sees "Alex has dibs". **Release** gives it up, **Take** takes it from someone else. It clears when the person saves an entry, or after 6 hours.
+- **Scouted tab.** The Scout list now has **To scout**, **Scouted** and **All**.
+- **Team box colours.** On the Scout list the team number box goes **orange** when a team is partly scouted and **green** when it's fully scouted (every rating and choice on the form filled in, across all scouts' entries; the free-text boxes are optional).
+- **Scoring speed and cycle time.** The Scoring section has a new **Scoring speed** rating and **Approximate cycle time (seconds)**: how long to score one load, from the loader. Both show in saved entries and as averages on the team page.
+- **Suggested overall rating.** The Overall section shows the average of your other ratings, with a **Use 4** button to apply it. The team page shows the average suggested overall next to the scouts' overall.
 - **Matches by team.** The Matches tab has a third option, **By team**: pick any team and see every match they play, who they play **with** and who **against**, their score and win/loss, and their record so far.
 - **Shared scouting.** The Scout list now shows who on your team has scouted each team ("Scouted by Sam, you"). **To scout** is the teams nobody has scouted yet, not just you, and the count is the whole team's. The scouting form tells you if teammates already scouted that team, and a new **Team activity** list shows who scouted or claimed what, and when.
 - **Claim a team.** In a team's scouting form, **I'll scout this** tells everyone you're on it ("Alex is scouting" on the list). **Release** gives it up, **Take over** takes it from someone else, and a claim clears itself once the claimer saves an entry (or after 6 hours).

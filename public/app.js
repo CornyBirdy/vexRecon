@@ -234,7 +234,7 @@ function schedule() { clearInterval(pollT); clearInterval(impT); if (code) { pol
 function setStatus() {
   const el = $('#sync'); if (!el) return;
   const n = outbox.length, unsaved = n + ' unsaved';
-  el.textContent = !code ? '' : !online ? (n ? 'Offline · ' + unsaved : 'Offline') : n ? 'Saving…' : lastSync ? 'Synced ' + new Date(lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '…';
+  el.innerHTML = !code ? '' : !online ? (n ? 'Offline · ' + unsaved : 'Offline') : n ? 'Saving…' : lastSync ? '<span class="sl">Synced </span>' + new Date(lastSync).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '…';
   el.className = !online ? 'off' : n ? 'busy' : '';
   el.title = !online ? 'No connection. Your changes are kept on this device and sent when you’re back online.' : '';
 }
@@ -518,7 +518,8 @@ const CHANGES = [
   ['Latest', [
     'Matches has a new By team view: who a team plays with and against, and their record.',
     'Scouting is shared: the Scout list shows who scouted each team, and a Team activity list shows who did what and when.',
-    'Claim a team ("I’ll scout this") so two people don’t scout the same one.',
+    'Dibs: tap Dibs on a team in the Scout list so two people don’t scout the same one. Teams go orange when partly scouted and green when fully scouted, and there’s a Scouted tab.',
+    'Scouting has Scoring speed, cycle time, and a suggested overall rating averaged from your other ratings.',
     'Find an event with filters for country, state / region, city, level and date.',
     'Remove a scout from Team settings.',
     'A new Event Home: your rank, record and next match at a glance.',
@@ -795,7 +796,14 @@ function vMatches() {
 }
 
 // What 1 and 5 mean for each rating, shown under the buttons so a bare "3" always has a meaning.
-const SCALE = { autoCons: ['Rarely works', 'Works every time'], driver: ['Beginner', 'Excellent'], driverCons: ['Many mistakes', 'Very steady'], speed: ['Slow', 'Very fast'], durability: ['Breaks easily', 'Very tough'], scoring: ['Poor', 'Excellent'], scoreCons: ['Hit or miss', 'Every time'], overall: ['Weak', 'Top pick'] };
+const SCALE = { autoCons: ['Rarely works', 'Works every time'], driver: ['Beginner', 'Excellent'], driverCons: ['Many mistakes', 'Very steady'], speed: ['Slow', 'Very fast'], durability: ['Breaks easily', 'Very tough'], scoring: ['Poor', 'Excellent'], scoreCons: ['Hit or miss', 'Every time'], overall: ['Weak', 'Top pick'], scoreSpeed: ['Very slow', 'Very fast'] };
+// The ratings that feed the suggested overall rating (their average).
+const RATE_F = ['autoCons', 'driver', 'driverCons', 'speed', 'durability', 'scoring', 'scoreSpeed', 'scoreCons'];
+const suggest = o => { const v = RATE_F.map(f => +o[f]).filter(x => x > 0); return v.length ? { avg: v.reduce((a, b) => a + b, 0) / v.length, n: v.length } : null };
+const suggestHTML = d => { const g = suggest(d); if (!g) return '<span class="mut">Rate a few things above and Recon suggests an overall rating from their average.</span>'; const r = Math.round(g.avg); return `Suggested overall: <b>${g.avg.toFixed(1)}</b> / 5 <span class="mut">(average of ${g.n} rating${g.n === 1 ? '' : 's'})</span> ` + (+d.overall === r ? '<span class="mut">· matches your rating</span>' : `<button type="button" data-act="usesuggest">Use ${r}</button>`) };
+// What a team needs before it counts as fully scouted (free-text boxes are optional). Entries from all scouts are combined.
+const REQ_F = ['autoPts', 'autoCons', 'driver', 'driverCons', 'robotType', 'speed', 'durability', 'scoring', 'scoreSpeed', 'cycleTime', 'reliable', 'scoreCons', 'toggle', 'overall', 'good'];
+const scoutState = t => { const sc = notes('scout', t); if (!sc.length) return ''; return REQ_F.every(f => sc.some(e => e[f] !== undefined && e[f] !== null && e[f] !== '' && e[f] !== 0)) ? 'full' : 'part' };
 const R = (f, v) => `<div class="rate" role="group" aria-labelledby="l_${f}">${[1, 2, 3, 4, 5].map(i => `<button data-act="rate" data-f="${f}" data-v="${i}" class="${v === i ? 'on' : ''}" aria-pressed="${v === i}">${i}</button>`).join('')}</div>${SCALE[f] ? `<div class="scale"><span>1 = ${SCALE[f][0]}</span><span>5 = ${SCALE[f][1]}</span></div>` : ''}`;
 // A labelled field: the label stays visible after something is typed, with an optional hint under it.
 const fld = (id, label, body, hint) => `<div class="ff"><label id="l_${id}" for="${id}">${label}</label>${hint ? `<div class="mut hint">${hint}</div>` : ''}${body}</div>`;
@@ -826,42 +834,41 @@ function vScout() {
       fldR('speed', 'Speed', d.speed) + fldR('durability', 'Durability', d.durability, 'Will it survive a hard match?'))}
     ${sect('Scoring', 'How well they score during a match.',
       fldR('scoring', 'Scoring ability', d.scoring) +
+      fldR('scoreSpeed', 'Scoring speed', d.scoreSpeed, 'How fast do they score during a match?') +
+      fld('f_cycleTime', 'Approximate cycle time (seconds)', `<input id="f_cycleTime" data-f="cycleTime" inputmode="decimal" value="${esc(d.cycleTime)}" placeholder="e.g. 8">`, 'Roughly how many seconds it takes them to score one load, from picking it up at the loader to scoring it.') +
       fld('f_reliable', 'Can they score reliably?', dd('f_reliable', d.reliable, opts(['Yes, reliable', 'Sometimes', 'No, bad at scoring'], 'Not sure yet'), { f: 'reliable' })) +
       fldR('scoreCons', 'Scoring consistency', d.scoreCons, 'Do they score about the same every match?'))}
     ${sect('Toggle', 'Whether they can hold a toggle, and how they do it.',
       fld('f_toggle', 'How well can they hold a toggle?', dd('f_toggle', d.toggle, opts(['Very well', 'Well', 'Decent', 'Not well', 'Not at all'], 'Not sure yet'), { f: 'toggle' })) +
       fld('f_toggleMech', 'Toggle mechanism', `<textarea id="f_toggleMech" data-f="toggleMech" placeholder="e.g. Pneumatic hook on the arm that clamps the top bar">${esc(d.toggleMech)}</textarea>`, 'Describe what they use to do the toggle (not a score).'))}
     ${sect('Overall', 'Your final read on this team.',
+      `<div class="suggest" id="sugg" aria-live="polite">${suggestHTML(d)}</div>` +
       fldR('overall', 'Overall rating', d.overall) +
       fld('f_good', 'Are they a good team?', dd('f_good', d.good, opts(['Yes', 'Decent', 'No'], 'Not sure yet'), { f: 'good' })) +
       fld('f_comments', 'Other comments & weaknesses', `<textarea id="f_comments" data-f="comments" placeholder="Anything else we should know…">${esc(d.comments)}</textarea>`))}
     <div class="card"><div class="foot"><span class="mut grow">✔ Autosaves as you go${online ? '' : ' (kept on this phone until you’re back online)'}.</span><button class="d" data-act="resetdraft">Reset</button><button class="p" data-act="donescout">Done</button></div></div>`;
   }
   const rel = n => { const a = [], o = []; ms.forEach(x => { const s = side(x, n); if (n === US || !s) return; (s === 'ally' ? a : o).push(x.label.replace(/^Mock /, '')) }); return { a, o } };
-  const all = teams().filter(t => t.number !== US), mine = t => myScouts(t.number).length, left = all.filter(t => !scoutedBy(t.number).length), show = sf === 'todo' ? left : all;
+  const all = teams().filter(t => t.number !== US), mine = t => myScouts(t.number).length, left = all.filter(t => !scoutedBy(t.number).length), show = sf === 'todo' ? left : sf === 'done' ? all.filter(t => scoutedBy(t.number).length) : all;
   const doneN = all.length - left.length;
   return `<div class="homehero scouthero"><span class="hl">Teams scouted</span><div class="hbig"><span data-count="${doneN}" data-ck="done">${doneN}</span><small>of ${all.length}</small></div><div class="sbar" role="progressbar" aria-valuenow="${doneN}" aria-valuemin="0" aria-valuemax="${all.length}"><i style="width:${all.length ? Math.round(100 * doneN / all.length) : 0}%"></i></div></div>
   <div class="scouthead"><span class="mut">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></span><span class="mut">${all.length - left.length} of ${all.length} done by the team</span></div>
-  ${segBar([['todo', 'To scout (' + left.length + ')'], ['all', 'All teams (' + all.length + ')']], sf, 'sfilter')}
+  ${segBar([['todo', 'To scout (' + left.length + ')'], ['done', 'Scouted (' + (all.length - left.length) + ')'], ['all', 'All (' + all.length + ')']], sf, 'sfilter')}
   <p class="mut legend"><span class="mtag g">Q</span> plays with us <span class="mtag r">Q</span> plays against us</p>
   <div class="card list">${show.map(t => {
-    const r = rel(t.number), n = mine(t), by = scoutedBy(t.number), cl = claimOf(t.number);
-    return `<div class="trow" data-act="startscout" data-t="${t.number}"><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div>${r.a.length || r.o.length ? `<div class="rels">${r.a.map(l => `<span class="mtag g" title="With us in ${esc(l)}" aria-label="With us in ${esc(l)}">${esc(l)}</span>`).join('')}${r.o.map(l => `<span class="mtag r" title="Against us in ${esc(l)}" aria-label="Against us in ${esc(l)}">${esc(l)}</span>`).join('')}</div>` : ''}${by.length || cl ? `<div class="who mut">${by.length ? 'Scouted by ' + by.map(w => w === name ? 'you' : esc(w)).join(', ') : ''}${by.length && cl ? ' · ' : ''}${cl ? `<span class="claim">${cl.by === name ? 'You are' : esc(cl.by) + ' is'} scouting</span>` : ''}</div>` : ''}</div>${by.length ? `<span class="tick" title="Scouted by ${esc(by.join(', '))}">✓${by.length > 1 ? ' ' + by.length : ''}</span>` : ''}<span class="chev" aria-hidden="true">›</span></div>`
-  }).join('') || empty(all.length ? 'Your team has scouted every team. Switch to All teams to edit an entry.' : 'Add teams first.')}</div>${activityCard()}`;
+    const r = rel(t.number), n = mine(t), by = scoutedBy(t.number), cl = claimOf(t.number), st = scoutState(t.number);
+    return `<div class="trow ${st}" data-act="startscout" data-t="${t.number}"><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div>${r.a.length || r.o.length ? `<div class="rels">${r.a.map(l => `<span class="mtag g" title="With us in ${esc(l)}" aria-label="With us in ${esc(l)}">${esc(l)}</span>`).join('')}${r.o.map(l => `<span class="mtag r" title="Against us in ${esc(l)}" aria-label="Against us in ${esc(l)}">${esc(l)}</span>`).join('')}</div>` : ''}${by.length || cl ? `<div class="who mut">${by.length ? 'Scouted by ' + by.map(w => w === name ? 'you' : esc(w)).join(', ') : ''}${by.length && cl ? ' · ' : ''}${cl ? `<span class="claim">${cl.by === name ? 'You have' : esc(cl.by) + ' has'} dibs</span>` : ''}</div>` : ''}</div>${st === 'full' ? '' : cl && cl.by === name ? `<button type="button" class="dibs on" data-act="unclaim" data-t="${t.number}">Release</button>` : `<button type="button" class="dibs" data-act="claim" data-t="${t.number}">${cl ? 'Take' : 'Dibs'}</button>`}${by.length ? `<span class="tick" title="Scouted by ${esc(by.join(', '))}">✓${by.length > 1 ? ' ' + by.length : ''}</span>` : ''}<span class="chev" aria-hidden="true">›</span></div>`
+  }).join('') || empty(!all.length ? 'Add teams first.' : sf === 'done' ? 'Nothing scouted yet.' : 'Your team has scouted every team. Open Scouted to edit an entry.')}</div>${activityCard()}`;
 }
 // Who did what, newest first: scouting entries and claims from the whole team.
 function activityCard() {
   const items = S.notes.filter(n => n.eventId === ev && (n.kind === 'scout' || (n.kind === 'claim' && claimOf(n.ref) === n))).sort((a, b) => b.ts - a.ts).slice(0, 10);
   if (!items.length) return '';
-  return `<div class="card"><h2>Team activity</h2><div class="list">${items.map(n => `<div class="trow" data-act="startscout" data-t="${esc(n.ref)}"><span class="avatar">${esc(((n.by || '?')[0] || '?').toUpperCase())}</span><div class="grow"><div><b>${esc(n.by || 'Someone')}</b> ${n.kind === 'claim' ? 'is scouting' : 'scouted'} <b>${esc(n.ref)}</b></div><div class="mut">${n.kind === 'claim' ? 'Claimed' : n.matchLabel ? 'Match ' + esc(n.matchLabel) : 'Overall'} · ${when(n.ts)}</div></div><span class="chev" aria-hidden="true">›</span></div>`).join('')}</div></div>`;
+  return `<div class="card"><h2>Team activity</h2><div class="list">${items.map(n => `<div class="trow" data-act="startscout" data-t="${esc(n.ref)}"><span class="avatar">${esc(((n.by || '?')[0] || '?').toUpperCase())}</span><div class="grow"><div><b>${esc(n.by || 'Someone')}</b> ${n.kind === 'claim' ? 'called dibs on' : 'scouted'} <b>${esc(n.ref)}</b></div><div class="mut">${n.kind === 'claim' ? 'Dibs' : n.matchLabel ? 'Match ' + esc(n.matchLabel) : 'Overall'} · ${when(n.ts)}</div></div><span class="chev" aria-hidden="true">›</span></div>`).join('')}</div></div>`;
 }
 function claimBar(t) {
-  const by = scoutedBy(t).filter(w => w !== name), cl = claimOf(t), mineC = cl && cl.by === name;
-  const msg = by.length ? `<p class="mut hint">Also scouted by <b>${by.map(esc).join(', ')}</b>.</p>` : '';
-  const row = mineC ? `<span class="grow">You’re scouting this team.</span><button data-act="unclaim" data-t="${esc(t)}">Release</button>`
-    : cl ? `<span class="grow"><b>${esc(cl.by)}</b> is scouting this team.</span><button data-act="claim" data-t="${esc(t)}">Take over</button>`
-    : `<span class="grow">Tell the team you’re on this one.</span><button data-act="claim" data-t="${esc(t)}">I’ll scout this</button>`;
-  return msg + `<div class="claimbar">${row}</div>`;
+  const by = scoutedBy(t).filter(w => w !== name), cl = claimOf(t);
+  return (by.length ? `<p class="mut hint">Also scouted by <b>${by.map(esc).join(', ')}</b>.</p>` : '') + (cl && cl.by !== name ? `<p class="mut hint"><b>${esc(cl.by)}</b> has dibs on this team.</p>` : '');
 }
 function newDraft(t, matchId) {
   const m = matchId && S.matches.find(x => x.id === matchId);
@@ -883,9 +890,9 @@ const sum = n => {
     grp('Autonomous', kv('Auto points', pts(n.autoPts)), kv('Auto consistency', r5(n.autoCons)), tx('What their auto does', n.autoNotes)) +
     grp('Driver', kv('Driver skill', r5(n.driver)), kv('Driver consistency', r5(n.driverCons)), tx('Driving notes', n.driveNotes)) +
     grp('Robot', tx('Type & design', n.robotType), kv('Speed', r5(n.speed)), kv('Durability', r5(n.durability))) +
-    grp('Scoring', kv('Scoring ability', r5(n.scoring)), kv('Scores reliably?', esc(n.reliable || '')), kv('Scoring consistency', r5(n.scoreCons))) +
+    grp('Scoring', kv('Scoring ability', r5(n.scoring)), kv('Scores reliably?', esc(n.reliable || '')), kv('Scoring speed', r5(n.scoreSpeed)), kv('Cycle time', n.cycleTime ? esc(n.cycleTime) + ' s' : ''), kv('Scoring consistency', r5(n.scoreCons))) +
     grp('Toggle', kv('Holds a toggle', esc(n.toggle || '')), tx('Toggle mechanism', n.toggleMech), !n.toggleMech && n.toggleQ ? kv('Mechanism rating (old form)', r5(n.toggleQ)) : '') +
-    grp('Overall', kv('Overall rating', r5(n.overall)), kv('Good team?', esc(n.good || '')), tx('Comments', n.comments)) + `</div>`;
+    grp('Overall', kv('Overall rating', r5(n.overall)), (g => g ? kv('Suggested overall', g.avg.toFixed(1) + ' / 5') : '')(suggest(n)), kv('Good team?', esc(n.good || '')), tx('Comments', n.comments)) + `</div>`;
 };
 
 // Everything the VEX app shows for a team, for the whole season: skills, record, event history, awards.
@@ -917,7 +924,7 @@ function vTeam(num) {
   return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) + `<button class="p wide" data-act="scoutfrom" data-t="${esc(num)}">Scout this team</button>
   ${(() => { const st = stats(), r = st.by.get(num); return r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '' })()}
   ${seasonCard(num)}
-  <div class="card"><h2>Scouting averages</h2><p class="mut">From ${sc.length} ${sc.length === 1 ? 'entry' : 'entries'}. Ratings are out of 5.</p>${sc.length ? tiles([[avg('autoPts'), 'Auto points'], [avg('driver'), 'Driver skill'], [avg('speed'), 'Speed'], [avg('scoring'), 'Scoring'], [avg('durability'), 'Durability'], [avg('overall'), 'Overall']]) : ''}</div>
+  <div class="card"><h2>Scouting averages</h2><p class="mut">From ${sc.length} ${sc.length === 1 ? 'entry' : 'entries'}. Ratings are out of 5.</p>${sc.length ? tiles([[avg('autoPts'), 'Auto points'], [avg('driver'), 'Driver skill'], [avg('speed'), 'Speed'], [avg('scoring'), 'Scoring'], [avg('scoreSpeed'), 'Scoring speed'], [(c => c === '-' ? c : c + ' s')(avg('cycleTime')), 'Cycle time'], [avg('durability'), 'Durability'], [avg('overall'), 'Overall'], [(v => v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-')(sc.map(x => suggest(x)).filter(Boolean).map(g => g.avg)), 'Suggested overall', 'average of the ratings']]) : ''}</div>
   <div class="card"><h2>Matches</h2>${ms.map(m => `<span class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}">${esc(m.label)}</span>`).join('') || '<span class="mut">None</span>'}</div>
   <div class="card"><h2>Scouting entries</h2>${sc.map(s => sum(s)).join('') || '<span class="mut">None yet</span>'}${notes('team', num).length ? `<h3>Older quick notes</h3>${notes('team', num).map(noteRow).join('')}` : ''}<div class="foot">${sc.length ? `<button class="d" data-act="clearscout" data-t="${num}">Clear all scouting entries</button>` : ''}${notes('team', num).length ? `<button class="d" data-act="clearnotes" data-t="${num}">Clear older quick notes</button>` : ''}</div></div>
   <div class="card"><h2>Alliance requests</h2>${notes('req', num).map(n => `<div class="note">${esc(n.text)}</div>`).join('') || '<span class="mut">None</span>'}</div>
@@ -1162,7 +1169,12 @@ document.addEventListener('click', e => {
   else if (a === 'rate') { // update in place so the choice eases across instead of the whole form redrawing
     const f = b.dataset.f; draft[f] = draft[f] == +b.dataset.v ? 0 : +b.dataset.v;
     b.parentElement.querySelectorAll('button').forEach(x => { const on = +x.dataset.v === draft[f]; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) });
-    saveDraft(0);
+    saveDraft(0); const sg = $('#sugg'); if (sg) sg.innerHTML = suggestHTML(draft);
+  }
+  else if (a === 'usesuggest') {
+    const g = suggest(draft); if (!g) return; draft.overall = Math.round(g.avg);
+    document.querySelectorAll('#app [data-act="rate"][data-f="overall"]').forEach(x => { const on = +x.dataset.v === draft.overall; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on) });
+    saveDraft(0); $('#sugg').innerHTML = suggestHTML(draft);
   }
   else if (a === 'addpick') { const n = b.dataset.t; const p = evObj().picks || []; if (n && !p.includes(n)) setPicks([...p, n]) }
   else if (a === 'pup' || a === 'pdn') { const p = [...evObj().picks], i = +b.dataset.i, j = a === 'pup' ? i - 1 : i + 1; if (j >= 0 && j < p.length) { [p[i], p[j]] = [p[j], p[i]]; setPicks(p) } }
