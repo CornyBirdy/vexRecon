@@ -17,7 +17,7 @@ const APP = { name: 'Recon', version: '1.0.0' };
 let US = '', NAMES = [];
 const COLS = ['events', 'teams', 'matches', 'notes', 'config', 'rankings', 'stats'];
 let S = { events: [], teams: [], matches: [], notes: [], config: [], rankings: [], stats: [] };
-let ev = ls('ev'), tab = ls('tab') || 'event', name = ls('name'), mf = ls('mf') || 'ours', sf = ls('sf') || 'todo', tv = ls('tv') || 'list', rks = ls('rks') || 'rank', sks = ls('sks') || 'season', sko = ls('sko') || 'c';
+let ev = ls('ev'), tab = ls('tab') || 'event', name = ls('name'), mf = ls('mf') || 'ours', mfT = ls('mft') || '', sf = ls('sf') || 'todo', tv = ls('tv') || 'list', rks = ls('rks') || 'rank', sks = ls('sks') || 'season', sko = ls('sko') || 'c';
 if (tab === 'teams') tab = 'event'; // Teams and Event are one tab now
 if (!['list', 'rank', 'skills', 'more'].includes(tv)) tv = 'list';
 let mTeam = null, scTeam = '', draft = null, open = {}, dirty = false, loaded = false;
@@ -101,6 +101,11 @@ const fmt = v => has(v) ? (Math.round(v * 10) / 10).toString() : '–';
 const pct = (w, n) => n ? Math.round(100 * w / n) + '%' : '–';
 let statsBusy = false, statsFailAt = 0;
 const statsAge = () => { const d = stDoc(); return d && d.t ? Date.now() - d.t : Infinity };
+// Scouting is shared by the whole team: anyone's entry counts, and a claim says "I'm on it" so two people don't scout the same team.
+const CLAIM_MS = 6 * 3600e3;
+const scoutedBy = t => { const m = new Map(); notes('scout', t).forEach(n => { const w = n.by || 'Someone'; if (!m.has(w)) m.set(w, n.ts) }); return [...m.keys()] };
+const claimOf = t => { const c = notes('claim', t)[0]; if (!c || Date.now() - c.ts > CLAIM_MS || notes('scout', t).some(n => n.by === c.by)) return null; return c };
+const claimId = t => 'c_' + ev + '_' + t;
 const myScouts = t => { const b = scoutBase(t, name); return S.notes.filter(n => n.kind === 'scout' && (n.id === b || n.id.startsWith(b + '_'))) };
 
 // ---------- sync ----------
@@ -724,21 +729,28 @@ function filt(q) { q = q.toLowerCase(); document.querySelectorAll('#tl2 .trow').
 const chips = (m, arr) => arr.map(n => `<button class="chip ${n === US ? 'me' : cls(m, n)}" data-act="team" data-t="${n}">${n}</button>`).join('');
 function vMatches() {
   if (!evObj()) return empty('Pick an event first.');
-  const all = matches(), list = mf === 'all' ? all : all.filter(m => side(m));
+  const all = matches(), inT = m => m.red.includes(mfT) || m.blue.includes(mfT), list = mf === 'all' ? all : mf === 'team' ? (mfT ? all.filter(inT) : []) : all.filter(m => side(m));
   const st = stats(), me = st.by.get(US), playedN = all.filter(m => side(m) && scored(m)).length;
   const rankChip = me && me.rank != null ? `<span class="hchip">Rank ${me.rank} of ${teams().length}</span>` : '';
   let h = `<section class="panel">${recStat(all.filter(m => side(m)))}</section>` +
-    segBar([['ours', 'Our matches'], ['all', 'All matches']], mf, 'mfilter');
+    segBar([['ours', 'Our matches'], ['all', 'All matches'], ['team', 'By team']], mf, 'mfilter');
+  let tw = 0, tl = 0, tt = 0;
+  if (mf === 'team') {
+    h += `<div class="card mteam">${dd('mft', mfT, [['', 'Pick a team…'], ...teams().map(t => [t.number, t.number + ' · ' + t.name])], { value: mfT, label: 'Team to show matches for' })}</div>`;
+    list.forEach(m => { if (!scored(m)) return; const red = m.red.includes(mfT), a = red ? m.rs : m.bs, b = red ? m.bs : m.rs; a > b ? tw++ : a < b ? tl++ : tt++ });
+    if (mfT) h += `<p class="mut meta">${list.length} ${list.length === 1 ? 'match' : 'matches'} for <b>${esc(mfT)}</b>${tw + tl + tt ? ` · ${tw}W ${tl}L${tt ? ' ' + tt + 'T' : ''} so far` : ''}</p>`;
+  }
   h += list.map(m => {
-    const s = side(m), o = open[m.id], ours = mf !== 'all' && !!s; // Our matches: our alliance is always the left column, and the score reads us–them
-    const sides = [['r', 'Red alliance', m.red, 'red'], ['b', 'Blue alliance', m.blue, 'blue']]; if (ours && s === 'blue') sides.reverse();
+    const s = side(m), o = open[m.id], ps = mf === 'team' ? (m.red.includes(mfT) ? 'red' : 'blue') : s, ours = mf !== 'all' && !!ps; // Our matches: our alliance is always the left column, and the score reads us–them
+    const sides = [['r', 'Red alliance', m.red, 'red'], ['b', 'Blue alliance', m.blue, 'blue']]; if (ours && ps === 'blue') sides.reverse();
     let res = '';
-    if (s && scored(m)) { const a = s === 'red' ? m.rs : m.bs, b = s === 'red' ? m.bs : m.rs; res = a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }
-    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" data-act="mopen" data-id="${m.id}" role="button" aria-expanded="${!!o}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${ours && s === 'blue' ? m.bs + '–' + m.rs : m.rs + '–' + m.bs}</span>` : ''}${res}<span class="grow"></span><span class="chev ${o ? 'up' : ''}" aria-hidden="true">›</span></div>
-    <div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${!ours && s === col ? 'mine' : ''}"><span>${l}</span>${chips(m, arr)}</div>`).join('')}</div>
+    const rel = mf === 'team' ? `<div class="mrel mut"><b>${esc(mfT)}</b> with ${m[ps].filter(x => x !== mfT).map(esc).join(', ') || '–'} <span aria-hidden="true">·</span> against ${m[ps === 'red' ? 'blue' : 'red'].map(esc).join(', ')}</div>` : '';
+    if (ps && scored(m)) { const a = ps === 'red' ? m.rs : m.bs, b = ps === 'red' ? m.bs : m.rs; res = a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }
+    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" data-act="mopen" data-id="${m.id}" role="button" aria-expanded="${!!o}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${ours && ps === 'blue' ? m.bs + '–' + m.rs : m.rs + '–' + m.bs}</span>` : ''}${res}<span class="grow"></span><span class="chev ${o ? 'up' : ''}" aria-hidden="true">›</span></div>
+    ${rel}<div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${!ours && s === col ? 'mine' : ''}"><span>${l}</span>${chips(m, arr)}</div>`).join('')}</div>
     ${o ? `<div class="mx ${justOpened === m.id ? 'reveal' : ''}">` + (s ? `<h3>Strategy</h3>${noteBox('match', m.id, 'strat', 'Our strategy for this match…')}<h3>Our alliance</h3>${noteBox('match', m.id, 'ally', 'What our partner said / their plan…')}<h3>Opposition</h3>${noteBox('match', m.id, 'opp', 'Weaknesses, tendencies…')}`
         : `<h3>Notes</h3>${noteBox('match', m.id, 'gen', 'What happened in this match…')}`) + `<div class="foot"><button class="d" data-act="clearmatch" data-id="${m.id}">Clear all notes for this match</button><button class="d" data-act="delmatch" data-id="${m.id}">Delete match</button></div></div>` : ''}</div>`
-  }).join('') || empty(mf === 'all' ? 'No matches yet.' : 'No matches with us yet.');
+  }).join('') || empty(mf === 'all' ? 'No matches yet.' : mf === 'team' ? (mfT ? 'No matches for ' + mfT + ' yet.' : 'Pick a team to see who they play with and against.') : 'No matches with us yet.');
   h += `<details class="card" id="d-addmatch" ${det('d-addmatch', !all.length)}><summary><h2>Add a match manually</h2></summary><div class="row"><input id="m_l" placeholder="Label e.g. Q12"><input id="m_o" type="number" inputmode="numeric" placeholder="Match number (for sorting)"></div>
   <h3>Red alliance</h3><div class="row"><input id="m_r1" data-combo="teams" autocomplete="off" placeholder="Team"><input id="m_r2" data-combo="teams" autocomplete="off" placeholder="Team"></div>
   <h3>Blue alliance</h3><div class="row"><input id="m_b1" data-combo="teams" autocomplete="off" placeholder="Team"><input id="m_b2" data-combo="teams" autocomplete="off" placeholder="Team"></div>
@@ -764,6 +776,7 @@ function vScout() {
     return `<button class="link back" data-act="donescout">‹ All teams</button>
     <div class="card"><h2><span class="num">${scTeam}</span> ${esc(tName(scTeam))}</h2>
     ${fld('scm', 'What are you scouting?', dd('scm', d.match, [['', 'Overall / pit scouting (not one match)'], ...tms.map(m => [m.id, 'Match ' + m.label + rel(m) + (scored(m) ? ' · played' : '')])]), 'Overall = your general read of the team. Pick a match to record what you saw in that one match.')}
+    ${claimBar(scTeam)}
     <p class="mut hint">Ratings go from 1 (weakest) to 5 (best); the words under each row say what that means. Tap the same number again to clear it.</p></div>
     ${sect('Autonomous', 'What the robot does on its own, before the drivers take over.',
       fld('f_autoPts', 'Auto points scored', `<input id="f_autoPts" data-f="autoPts" inputmode="decimal" value="${esc(d.autoPts)}" placeholder="e.g. 12">`, 'Roughly how many points their autonomous scores in a match.') +
@@ -789,16 +802,30 @@ function vScout() {
     <div class="card"><div class="foot"><span class="mut grow">✔ Autosaves as you go${online ? '' : ' (kept on this phone until you’re back online)'}.</span><button class="d" data-act="resetdraft">Reset</button><button class="p" data-act="donescout">Done</button></div></div>`;
   }
   const rel = n => { const a = [], o = []; ms.forEach(x => { const s = side(x, n); if (n === US || !s) return; (s === 'ally' ? a : o).push(x.label.replace(/^Mock /, '')) }); return { a, o } };
-  const all = teams().filter(t => t.number !== US), mine = t => myScouts(t.number).length, left = all.filter(t => !mine(t)), show = sf === 'todo' ? left : all;
+  const all = teams().filter(t => t.number !== US), mine = t => myScouts(t.number).length, left = all.filter(t => !scoutedBy(t.number).length), show = sf === 'todo' ? left : all;
   const doneN = all.length - left.length;
   return `<div class="homehero scouthero"><span class="hl">Teams scouted</span><div class="hbig"><span data-count="${doneN}" data-ck="done">${doneN}</span><small>of ${all.length}</small></div><div class="sbar" role="progressbar" aria-valuenow="${doneN}" aria-valuemin="0" aria-valuemax="${all.length}"><i style="width:${all.length ? Math.round(100 * doneN / all.length) : 0}%"></i></div></div>
-  <div class="scouthead"><span class="mut">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></span><span class="mut">${all.length - left.length} of ${all.length} done</span></div>
+  <div class="scouthead"><span class="mut">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></span><span class="mut">${all.length - left.length} of ${all.length} done by the team</span></div>
   ${segBar([['todo', 'To scout (' + left.length + ')'], ['all', 'All teams (' + all.length + ')']], sf, 'sfilter')}
   <p class="mut legend"><span class="mtag g">Q</span> plays with us <span class="mtag r">Q</span> plays against us</p>
   <div class="card list">${show.map(t => {
-    const r = rel(t.number), n = mine(t);
-    return `<div class="trow" data-act="startscout" data-t="${t.number}"><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div>${r.a.length || r.o.length ? `<div class="rels">${r.a.map(l => `<span class="mtag g" title="With us in ${esc(l)}" aria-label="With us in ${esc(l)}">${esc(l)}</span>`).join('')}${r.o.map(l => `<span class="mtag r" title="Against us in ${esc(l)}" aria-label="Against us in ${esc(l)}">${esc(l)}</span>`).join('')}</div>` : ''}</div>${n ? `<span class="tick" title="You’ve scouted this${n > 1 ? ' (' + n + ' entries)' : ''}">✓${n > 1 ? ' ' + n : ''}</span>` : ''}<span class="chev" aria-hidden="true">›</span></div>`
-  }).join('') || empty(all.length ? 'You’ve scouted every team. Switch to All teams to edit an entry.' : 'Add teams first.')}</div>`;
+    const r = rel(t.number), n = mine(t), by = scoutedBy(t.number), cl = claimOf(t.number);
+    return `<div class="trow" data-act="startscout" data-t="${t.number}"><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div>${r.a.length || r.o.length ? `<div class="rels">${r.a.map(l => `<span class="mtag g" title="With us in ${esc(l)}" aria-label="With us in ${esc(l)}">${esc(l)}</span>`).join('')}${r.o.map(l => `<span class="mtag r" title="Against us in ${esc(l)}" aria-label="Against us in ${esc(l)}">${esc(l)}</span>`).join('')}</div>` : ''}${by.length || cl ? `<div class="who mut">${by.length ? 'Scouted by ' + by.map(w => w === name ? 'you' : esc(w)).join(', ') : ''}${by.length && cl ? ' · ' : ''}${cl ? `<span class="claim">${cl.by === name ? 'You are' : esc(cl.by) + ' is'} scouting</span>` : ''}</div>` : ''}</div>${by.length ? `<span class="tick" title="Scouted by ${esc(by.join(', '))}">✓${by.length > 1 ? ' ' + by.length : ''}</span>` : ''}<span class="chev" aria-hidden="true">›</span></div>`
+  }).join('') || empty(all.length ? 'Your team has scouted every team. Switch to All teams to edit an entry.' : 'Add teams first.')}</div>${activityCard()}`;
+}
+// Who did what, newest first: scouting entries and claims from the whole team.
+function activityCard() {
+  const items = S.notes.filter(n => n.eventId === ev && (n.kind === 'scout' || (n.kind === 'claim' && claimOf(n.ref) === n))).sort((a, b) => b.ts - a.ts).slice(0, 10);
+  if (!items.length) return '';
+  return `<div class="card"><h2>Team activity</h2><div class="list">${items.map(n => `<div class="trow" data-act="startscout" data-t="${esc(n.ref)}"><span class="avatar">${esc(((n.by || '?')[0] || '?').toUpperCase())}</span><div class="grow"><div><b>${esc(n.by || 'Someone')}</b> ${n.kind === 'claim' ? 'is scouting' : 'scouted'} <b>${esc(n.ref)}</b></div><div class="mut">${n.kind === 'claim' ? 'Claimed' : n.matchLabel ? 'Match ' + esc(n.matchLabel) : 'Overall'} · ${when(n.ts)}</div></div><span class="chev" aria-hidden="true">›</span></div>`).join('')}</div></div>`;
+}
+function claimBar(t) {
+  const by = scoutedBy(t).filter(w => w !== name), cl = claimOf(t), mineC = cl && cl.by === name;
+  const msg = by.length ? `<p class="mut hint">Also scouted by <b>${by.map(esc).join(', ')}</b>.</p>` : '';
+  const row = mineC ? `<span class="grow">You’re scouting this team.</span><button data-act="unclaim" data-t="${esc(t)}">Release</button>`
+    : cl ? `<span class="grow"><b>${esc(cl.by)}</b> is scouting this team.</span><button data-act="claim" data-t="${esc(t)}">Take over</button>`
+    : `<span class="grow">Tell the team you’re on this one.</span><button data-act="claim" data-t="${esc(t)}">I’ll scout this</button>`;
+  return msg + `<div class="claimbar">${row}</div>`;
 }
 function newDraft(t, matchId) {
   const m = matchId && S.matches.find(x => x.id === matchId);
@@ -918,6 +945,7 @@ function ddPick(id, v, d) {
   d.value = v;
   if (id === 'evsel' && v === '+add') { tv = 'more'; ls('tv', tv); dState['d-more'] = true; render(); const el = $('#d-more'); if (el) el.scrollIntoView({ block: 'start' }) }
   else if (id === 'evsel') { ev = v; ls('ev', ev); render() }
+  else if (id === 'mft') { mfT = v; ls('mft', mfT); render() }
   else if (id === 'scm') { flushDraft(); loadDraft(scTeam, v); render() }
   else if (id === 'ebreg' || id === 'eblvl' || id === 'ebwhen') { EB.f[{ ebreg: 'region', eblvl: 'level', ebwhen: 'when' }[id]] = v; ebPaint() }
   else if (d.f && draft && tab === 'scout') { draft[d.f] = v; saveDraft(0); const el = $('#' + id); if (el) { const hit = d.options.find(x => x[0] === v) || d.options[0]; el.querySelector('.sv').textContent = hit[1]; el.querySelector('.sv').classList.toggle('ph', !v) } }
@@ -1076,6 +1104,8 @@ document.addEventListener('click', e => {
   else if (a === 'clearnotes') { if (sure(b)) notes('team', b.dataset.t).forEach(n => del('notes', n.id)) }
   else if (a === 'clearscout') { if (sure(b)) { notes('scout', b.dataset.t).forEach(n => del('notes', n.id)); if (scTeam === b.dataset.t) { saveT = null; draft = null; scTeam = '' } } }
   else if (a === 'clearmatch') { if (sure(b)) notes('match', b.dataset.id).forEach(n => del('notes', n.id)) }
+  else if (a === 'claim') { const t = b.dataset.t; if (name && t) put('notes', claimId(t), { eventId: ev, kind: 'claim', ref: t, by: name, ts: Date.now() }) }
+  else if (a === 'unclaim') { del('notes', claimId(b.dataset.t)) }
   else if (a === 'startscout') { if (!name || b.dataset.t === US) return; flushDraft(); scTeam = b.dataset.t; loadDraft(scTeam, ''); navAnim = 'fwd'; render() }
   else if (a === 'scoutfrom') { const t = b.dataset.t; flushDraft(); mTeam = null; tab = 'scout'; ls('tab', tab); if (name && t !== US) { scTeam = t; loadDraft(t, '') } else { scTeam = ''; draft = null } render() }
   else if (a === 'donescout') { flushDraft(); scTeam = ''; draft = null; navAnim = 'back'; render() }

@@ -7,10 +7,14 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ## [Unreleased]
 
 ### Changed
+- The sign-in screen no longer shows an empty status dot next to the light/dark button.
 - **Moved from Netlify to Cloudflare Pages + D1** (vexrecon.pages.dev). The app looks and works the same. Data now lives in a D1 database, so teams on the old site need to set up again and re-import their events (52111A can still sign in with its old code). Team codes are now stored with PBKDF2 instead of scrypt, and a full event import is kept under Cloudflare's free-plan limit of 50 requests.
 - Phones now check for teammates' changes every 10 seconds instead of every 3.
 
 ### Added
+- **Matches by team.** The Matches tab has a third option, **By team**: pick any team and see every match they play, who they play **with** and who **against**, their score and win/loss, and their record so far.
+- **Shared scouting.** The Scout list now shows who on your team has scouted each team ("Scouted by Sam, you"). **To scout** is the teams nobody has scouted yet, not just you, and the count is the whole team's. The scouting form tells you if teammates already scouted that team, and a new **Team activity** list shows who scouted or claimed what, and when.
+- **Claim a team.** In a team's scouting form, **I'll scout this** tells everyone you're on it ("Alex is scouting" on the list). **Release** gives it up, **Take over** takes it from someone else, and a claim clears itself once the claimer saves an entry (or after 6 hours).
 - **Event finder filters and a faster finder.** Under the search box you can now narrow events by **region**, **level** and **date** (next 7 / 30 days, this month, or last 7 / 30 days on the Earlier tab), and **Hide added** hides events already in Recon. Event lists are now remembered for 10 minutes, so switching between Our events, Coming up and Earlier is instant, and searching a list you already loaded no longer asks the server again. While it loads you see a spinner and placeholder rows.
 - **Remove a scout.** Team settings now lists the team's scouts with a **Remove** button (tap twice to confirm), and an **Add a scout** box. Their saved notes stay.
 - **Home tells you what's happening.** The greeting is now a status line: **Live now · Day 2 of 3**, **Starts in 3 days · Sat 15 Nov**, or **Ended 2 days ago**. (Your next match has its own card, so it isn't repeated in the status.) **Change** (the scout name) is next to your name at the top. The rank card jumps to the Rankings tab and highlights your team, and the next-match card jumps to that match.
