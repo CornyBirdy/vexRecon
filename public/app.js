@@ -400,9 +400,10 @@ function segPlace(snap, ghost) {
 window.addEventListener('resize', () => segPlace());
 function render() {
   if (dragging) { dirty = true; return }
-  document.body.classList.toggle('out', !code);
+  const out = !code || wbusy; // while a sign-in is being checked the code is already set, but we keep showing the welcome screen (drawing the app for a moment made the card blink)
+  document.body.classList.toggle('out', out);
   // the welcome entrance animation only plays the first time it appears, not on every re-render (it made the card blink out and fade back in)
-  if (!code) { $('#nav').innerHTML = ''; const sb = segSnap(), shown = !!$('#app .welcome'); $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Welcome'; $('#evbar').innerHTML = ''; if (sb.wmode || shown) $('#app .welcome')?.classList.add('swap'); segPlace(sb); lastView = ''; return }
+  if (out) { $('#nav').innerHTML = ''; const sb = segSnap(), shown = !!$('#app .welcome'); $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Welcome'; $('#evbar').innerHTML = ''; if (sb.wmode || shown) $('#app .welcome')?.classList.add('swap'); segPlace(sb); lastView = ''; return }
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) || menuFor) { dirty = true; return }
   dirty = false;
   US = norm(team);
@@ -1087,7 +1088,13 @@ document.addEventListener('click', e => {
     ask('Log out of this device?', unsent + 'To get back in you need the team number and the team code (' + code + '). Make sure you have the code saved before you log out.', 'Log out').then(ok => { if (!ok) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; rkShown = ''; RK = null; EB.list = null; schedule(); render(); setStatus() })
   }
   else if (a === 'ebscope') { EB.scope = b.dataset.v; ls('ebs', EB.scope); EB.msg = ''; EB.f.when = ''; clearTimeout(ebT); ebLoad(); render() }
-  else if (a === 'ebfopen') { EB.fo = !EB.fo; ebPaint() }
+  else if (a === 'ebfopen') {
+    // the panel eases open and closed (height + fade); with reduce-motion it just appears
+    const cur = $('.ebpanel'), go = (el, from, to, done) => { const cs = getComputedStyle(el), h = el.offsetHeight, pt = cs.paddingTop, pb = cs.paddingBottom, k = { height: h + 'px', paddingTop: pt, paddingBottom: pb, opacity: 1 }, z = { height: '0px', paddingTop: '0px', paddingBottom: '0px', opacity: 0 };
+      el.style.overflow = 'hidden'; const an = el.animate(from ? [z, k] : [k, z], { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)' }); an.onfinish = () => { el.style.overflow = ''; if (done) done() } };
+    if (EB.fo && cur && !reduced()) { EB.fo = false; go(cur, false, 0, ebPaint) }
+    else { EB.fo = !EB.fo; ebPaint(); const el = $('.ebpanel'); if (el && !reduced()) go(el, true) }
+  }
   else if (a === 'ebclr') { const k = b.dataset.k; EB.f[k] = ''; if (k === 'country') { EB.f.region = ''; EB.f.city = '' } if (k === 'region') EB.f.city = ''; ebPaint() }
   else if (a === 'ebhide') { EB.f.hide = !EB.f.hide; ebPaint() }
   else if (a === 'ebreset') { EB.f = { country: '', region: '', city: '', level: '', when: '', hide: false }; ebPaint() }
