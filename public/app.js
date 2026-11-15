@@ -517,7 +517,7 @@ const CHANGES = [
     'Matches has a new By team view: who a team plays with and against, and their record.',
     'Scouting is shared: the Scout list shows who scouted each team, and a Team activity list shows who did what and when.',
     'Claim a team ("I’ll scout this") so two people don’t scout the same one.',
-    'Find an event with filters for region, level and date.',
+    'Find an event with filters for country, state / region, city, level and date.',
     'Remove a scout from Team settings.',
     'A new Event Home: your rank, record and next match at a glance.',
     'Recovery key for teams, so a lost team code can be replaced.']],
@@ -678,7 +678,7 @@ function vSkills() {
 // ---------- event browser: find an event on VEX Events instead of typing its code ----------
 // Results come from the server (/api/events). Typing filters them there (after a short pause); the list is painted
 // straight into #ebres so typing in the search box never fights with a full re-render.
-let EB = { scope: ls('ebs') || 'mine', q: '', list: null, total: 0, busy: false, err: '', msg: '', f: { region: '', level: '', when: '', hide: false } }, ebT, ebSeq = 0;
+let EB = { scope: ls('ebs') || 'mine', q: '', list: null, total: 0, busy: false, err: '', msg: '', f: { country: '', region: '', city: '', level: '', when: '', hide: false } }, ebT, ebSeq = 0;
 // Event lists are remembered for 10 minutes (per tab and search), so switching tabs or coming back is instant.
 const EBC = lsJ('ebc') || {}, EB_TTL = 10 * 60000;
 const ebKey = () => EB.scope + '|' + EB.q.trim().toLowerCase(), ebFresh = k => EBC[k] && Date.now() - EBC[k].t < EB_TTL;
@@ -688,7 +688,9 @@ const ebDaysTo = d => d ? Math.round((new Date(String(d).slice(0, 10) + 'T12:00:
 function ebVisible() {
   const f = EB.f, have = new Set(S.events.map(e => skuOf(e)));
   return (EB.list || []).filter(e => {
-    if (f.region && e.region !== f.region) return false;
+    if (f.country && e.country !== f.country) return false;
+    if (f.region && ebReg(e) !== f.region) return false;
+    if (f.city && e.city !== f.city) return false;
     if (f.level && e.level !== f.level) return false;
     if (f.hide && have.has(e.sku.toUpperCase())) return false;
     if (f.when) { const d = ebDaysTo(e.start), tm = new Date(), sd = e.start ? new Date(String(e.start).slice(0, 10) + 'T12:00:00') : null;
@@ -701,11 +703,15 @@ function ebVisible() {
     return true;
   });
 }
-const ebFiltersOn = () => !!(EB.f.region || EB.f.level || EB.f.when || EB.f.hide);
+const ebReg = e => e.country + '\u0001' + e.region; // a state/region is only unique within its country (there's a Georgia in two)
+const ebFiltersOn = () => !!(EB.f.country || EB.f.region || EB.f.city || EB.f.level || EB.f.when || EB.f.hide);
 function ebFilters() {
   const L = EB.list || [], uniq = fn => [...new Set(L.map(fn).filter(Boolean))].sort(), f = EB.f;
   const when = EB.scope === 'past' ? [['', 'Any date'], ['l7', 'Last 7 days'], ['l30', 'Last 30 days'], ['tm', 'This month']] : [['', 'Any date'], ['n7', 'Next 7 days'], ['n30', 'Next 30 days'], ['tm', 'This month']];
-  return `<div class="ebfilters">${dd('ebreg', f.region, [['', 'Any region'], ...uniq(e => e.region).map(x => [x, x])], { label: 'Region', value: f.region })}${dd('eblvl', f.level, [['', 'Any level'], ...uniq(e => e.level).map(x => [x, x])], { label: 'Level', value: f.level })}${dd('ebwhen', f.when, when, { label: 'Date', value: f.when })}<button type="button" class="chip ${f.hide ? 'on' : ''}" data-act="ebhide" aria-pressed="${f.hide}">Hide added</button>${ebFiltersOn() ? '<button type="button" class="link" data-act="ebreset">Clear</button>' : ''}</div>`;
+  const inC = L.filter(e => !f.country || e.country === f.country), countries = uniq(e => e.country);
+  const regs = [...new Map(inC.filter(e => e.region).map(e => [ebReg(e), f.country || !e.country ? e.region : e.region + ', ' + e.country])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const cities = uniq(e => e.city && (!f.country || e.country === f.country) && (!f.region || ebReg(e) === f.region) ? e.city : '');
+  return `<div class="ebfilters">${countries.length > 1 || f.country ? dd('ebcty', f.country, [['', 'Any country'], ...countries.map(x => [x, x])], { label: 'Country', value: f.country }) : ''}${regs.length > 1 || f.region ? dd('ebreg', f.region, [['', 'Any state / region'], ...regs], { label: 'State or region', value: f.region }) : ''}${cities.length > 1 || f.city ? dd('ebcity', f.city, [['', 'Any city'], ...cities.map(x => [x, x])], { label: 'City', value: f.city }) : ''}${dd('eblvl', f.level, [['', 'Any level'], ...uniq(e => e.level).map(x => [x, x])], { label: 'Level', value: f.level })}${dd('ebwhen', f.when, when, { label: 'Date', value: f.when })}<button type="button" class="chip ${f.hide ? 'on' : ''}" data-act="ebhide" aria-pressed="${f.hide}">Hide added</button>${ebFiltersOn() ? '<button type="button" class="link" data-act="ebreset">Clear</button>' : ''}</div>`;
 }
 if (!['mine', 'soon', 'past'].includes(EB.scope)) EB.scope = 'mine';
 const ebDay = d => new Date(String(d).slice(0, 10) + 'T12:00:00');
@@ -724,7 +730,7 @@ function ebRows() {
 const ebMsgText = () => EB.msg || (EB.busy ? 'Searching VEX Events…' : '');
 const ebMsgCls = () => 'mut ebmsg' + (EB.busy ? ' busy' : '');
 const ebHTML = () => `<div id="eb">${segBar([['mine', 'Our events'], ['soon', 'Coming up'], ['past', 'Earlier']], EB.scope, 'ebscope')}
-  <input id="ebq" type="search" value="${esc(EB.q)}" placeholder="Search by name, city, region or code…" aria-label="Search events" autocomplete="off" spellcheck="false">
+  <input id="ebq" type="search" value="${esc(EB.q)}" placeholder="Search by name, city, state, country or code…" aria-label="Search events" autocomplete="off" spellcheck="false">
   <div id="ebf">${ebFilters()}</div>
   <p class="${ebMsgCls()}" id="ebmsg" role="status">${esc(ebMsgText())}</p><div id="ebres">${ebRows()}</div></div>`;
 function ebPaint() { const r = $('#ebres'), m = $('#ebmsg'), f = $('#ebf'); if (f) f.innerHTML = ebFilters(); if (r) r.innerHTML = ebRows(); if (m) { m.textContent = ebMsgText(); m.className = ebMsgCls() } }
@@ -963,7 +969,9 @@ function ddPick(id, v, d) {
   else if (id === 'evsel') { ev = v; ls('ev', ev); render() }
   else if (id === 'mft') { mfT = v; ls('mft', mfT); render() }
   else if (id === 'scm') { flushDraft(); loadDraft(scTeam, v); render() }
-  else if (id === 'ebreg' || id === 'eblvl' || id === 'ebwhen') { EB.f[{ ebreg: 'region', eblvl: 'level', ebwhen: 'when' }[id]] = v; ebPaint() }
+  else if (id === 'ebcty') { EB.f.country = v; EB.f.region = ''; EB.f.city = ''; ebPaint() }
+  else if (id === 'ebreg') { EB.f.region = v; EB.f.city = ''; if (v && !EB.f.country) EB.f.country = v.split('\u0001')[0]; ebPaint() }
+  else if (id === 'ebcity' || id === 'eblvl' || id === 'ebwhen') { EB.f[{ ebcity: 'city', eblvl: 'level', ebwhen: 'when' }[id]] = v; ebPaint() }
   else if (d.f && draft && tab === 'scout') { draft[d.f] = v; saveDraft(0); const el = $('#' + id); if (el) { const hit = d.options.find(x => x[0] === v) || d.options[0]; el.querySelector('.sv').textContent = hit[1]; el.querySelector('.sv').classList.toggle('ph', !v) } }
 }
 // team suggestions for the number boxes in the manual forms
@@ -1067,7 +1075,7 @@ document.addEventListener('click', e => {
   }
   else if (a === 'ebscope') { EB.scope = b.dataset.v; ls('ebs', EB.scope); EB.msg = ''; EB.f.when = ''; clearTimeout(ebT); ebLoad(); render() }
   else if (a === 'ebhide') { EB.f.hide = !EB.f.hide; ebPaint() }
-  else if (a === 'ebreset') { EB.f = { region: '', level: '', when: '', hide: false }; ebPaint() }
+  else if (a === 'ebreset') { EB.f = { country: '', region: '', city: '', level: '', when: '', hide: false }; ebPaint() }
   else if (a === 'evadd') { b.disabled = true; doImport(b.dataset.sku, t => { EB.msg = t === 'Importing…' ? 'Adding ' + b.dataset.sku + '…' : t; ebPaint() }, () => { tv = 'list'; ls('tv', tv) }) }
   else if (a === 'evopen') { const id = String(b.dataset.sku).toLowerCase(); if (S.events.some(x => x.id === id)) { ev = id; ls('ev', ev); tv = 'list'; ls('tv', tv); render() } }
   else if (a === 'rcgo') {

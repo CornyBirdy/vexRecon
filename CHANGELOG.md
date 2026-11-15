@@ -7,6 +7,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ## [Unreleased]
 
 ### Changed
+- **Better event filters.** The event finder now filters by **country**, then **state / region** (only the ones in that country, so South Australia no longer sits next to Thailand), then **city**. Picking a state fills in its country, and each box only appears when there's something to choose.
 - **About Recon moved out of Team settings** to a quiet link at the bottom of the More page, next to a new **What’s new** link that lists recent changes in plain words.
 - The sign-in screen no longer shows an empty status dot next to the light/dark button.
 - **Moved from Netlify to Cloudflare Pages + D1** (vexrecon.pages.dev). The app looks and works the same. Data now lives in a D1 database, so teams on the old site need to set up again and re-import their events (52111A can still sign in with its old code). Team codes are now stored with PBKDF2 instead of scrypt, and a full event import is kept under Cloudflare's free-plan limit of 50 requests.
