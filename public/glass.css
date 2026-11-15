@@ -178,7 +178,6 @@ body.out .evbar { display: none; }
 
 /* ================= Flat: quiet chrome, one accent, no glass, glows or colour washes (unslop method) ================= */
 :root { --spring: cubic-bezier(0.2, 0.7, 0.2, 1); } /* one easing curve: nothing overshoots */
-*, *::before, *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 header:after { display: none; }
 .tap:hover { border-color: var(--border-ctl); }
 .seg.pilled button.on, .seg button.on { box-shadow: none; }
@@ -281,3 +280,12 @@ button.p, .composer.has button { background: var(--accent-fill); }
 .vs .side.r { background: color-mix(in oklch, var(--alliance-red, var(--red)) 14%, var(--card)); } .vs .side.b { background: color-mix(in oklch, var(--alliance-blue, var(--blue)) 14%, var(--card)); }
 .vs .side.mine { border-color: transparent; box-shadow: none; }
 .vs .side.r.mine { background: color-mix(in oklch, var(--alliance-red, var(--red)) 26%, var(--card)); } .vs .side.b.mine { background: color-mix(in oklch, var(--alliance-blue, var(--blue)) 26%, var(--card)); }
+
+/* ================= Glass controls ================= */
+button:where(:not(.link):not(.d):not(.p):not(.chip):not(.sel):not(.mi)), .ib, #theme, .segpill { background: var(--g-fill), var(--field); box-shadow: var(--g-edge), var(--g-drop); -webkit-backdrop-filter: blur(var(--blur-ctl)) saturate(1.5); backdrop-filter: blur(var(--blur-ctl)) saturate(1.5); }
+button:where(:not(.link):not(.d):not(.p):not(.chip):not(.sel):not(.mi)):hover, .ib:hover, #theme:hover, .segpill:hover { background: var(--g-fill), var(--field) !important; filter: brightness(1.14); }
+button.p, .composer.has button { background: linear-gradient(160deg, color-mix(in oklch, var(--a) 100%, white 16%), color-mix(in oklch, var(--a) 100%, black 14%)); box-shadow: inset 0 1px 0 oklch(1 0 0 / .38), inset 0 -1px 0 oklch(0 0 0 / .14), 0 8px 18px -10px color-mix(in oklch, var(--a) 70%, black); }
+.seg button, nav button, .composer.has button.p-off, .seg.pilled button.on { background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; filter: none; }
+nav { background: var(--g-fill), var(--g-bar); box-shadow: var(--g-edge), 0 14px 34px -14px var(--shadow-c); -webkit-backdrop-filter: blur(var(--blur-ctl)) saturate(1.5); backdrop-filter: blur(var(--blur-ctl)) saturate(1.5); }
+.navpill { background: var(--g-fill); box-shadow: var(--g-edge); }
+#sync { background: var(--sunken); }
