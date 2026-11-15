@@ -6,6 +6,9 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+### Changed
+- **The picklist's "Still to pick" teams now show their team name under the number**, so you can tell who's who without opening each team.
+
 ## [1.1.0] - 2026-11-15: Spectator mode, match times and fields
 
 ### Fixed

@@ -974,7 +974,7 @@ function vPick() {
   <div class="card"><h2>Alliance requests</h2><p class="mut">Teams that asked to ally with us, and what they say they’re good at.</p>
     <div class="row"><input id="rq_t" data-combo="teams" autocomplete="off" placeholder="Team #" class="narrow"><input id="rq_x" placeholder="Their strengths"><button data-act="addreq">Add</button></div>
     ${notes('req').map(n => `<div class="note ${fresh(n)}"><div class="ntext"><b>${esc(n.ref)}</b> ${esc(tName(n.ref))} — ${esc(n.text)}</div><small>${esc(n.by || '')}${p.includes(n.ref) ? '<span>· On the picklist</span>' : `<button class="link" data-act="addpick" data-t="${esc(n.ref)}">Add to picklist</button>`}<button class="d" data-act="delnote" data-id="${n.id}">Delete</button></small></div>`).join('')}</div>
-  <div class="card"><h2>Still to pick</h2><p class="mut">Tap a team to add it to the list.</p>${avail.map(t => `<button class="chip" data-act="addpick" data-t="${t.number}">${t.number}</button>`).join('') || '<span class="mut">Every team is on the list.</span>'}</div>${tlist()}`;
+  <div class="card"><h2>Still to pick</h2><p class="mut">Tap a team to add it to the list.</p>${avail.map(t => `<button class="chip pkc" data-act="addpick" data-t="${t.number}">${t.number}${t.name ? `<small>${esc(t.name)}</small>` : ''}</button>`).join('') || '<span class="mut">Every team is on the list.</span>'}</div>${tlist()}`;
 }
 const setPicks = p => upd('events', ev, { picks: p });
 
