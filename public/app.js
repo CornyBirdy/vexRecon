@@ -1089,9 +1089,9 @@ document.addEventListener('click', e => {
   }
   else if (a === 'ebscope') { EB.scope = b.dataset.v; ls('ebs', EB.scope); EB.msg = ''; EB.f.when = ''; clearTimeout(ebT); ebLoad(); render() }
   else if (a === 'ebfopen') {
-    // the panel eases open and closed (height + fade); with reduce-motion it just appears
+    // the panel eases open and closed (height + fade); with reduce-motion it just appears. Closing keeps its end state ('forwards') so it doesn't spring back to full height for a frame before it's removed.
     const cur = $('.ebpanel'), go = (el, from, to, done) => { const cs = getComputedStyle(el), h = el.offsetHeight, pt = cs.paddingTop, pb = cs.paddingBottom, k = { height: h + 'px', paddingTop: pt, paddingBottom: pb, opacity: 1 }, z = { height: '0px', paddingTop: '0px', paddingBottom: '0px', opacity: 0 };
-      el.style.overflow = 'hidden'; const an = el.animate(from ? [z, k] : [k, z], { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)' }); an.onfinish = () => { el.style.overflow = ''; if (done) done() } };
+      el.style.overflow = 'hidden'; const an = el.animate(from ? [z, k] : [k, z], { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)', fill: from ? 'none' : 'forwards' }); an.onfinish = () => { el.style.overflow = ''; if (done) done() } };
     if (EB.fo && cur && !reduced()) { EB.fo = false; go(cur, false, 0, ebPaint) }
     else { EB.fo = !EB.fo; ebPaint(); const el = $('.ebpanel'); if (el && !reduced()) go(el, true) }
   }

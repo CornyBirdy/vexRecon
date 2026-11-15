@@ -309,3 +309,6 @@ html, body { overflow-x: clip; }
 #appclip { max-width: 860px; margin: 0 auto; overflow-x: clip; }
 #appclip > main { max-width: none; margin: 0; }
 @media (min-width: 860px) { .panel > .stat:only-child { grid-column: 1 / -1; } }
+
+/* the sign-in card and its tabs never animate: anything that restyles them (autofill, a re-render) used to make them blink out and fade back in */
+.welcome > .seg, .welcome > .card, .welcome > .credit { animation: none !important; opacity: 1 !important; }

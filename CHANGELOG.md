@@ -7,6 +7,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ## [Unreleased]
 
 ### Changed
+- Closing the filter panel no longer snaps back for a moment at the end, and the sign-in card no longer fades in at all (it just appears with the logo animating in), so it can't blink.
 - **The filter panel eases open and closed** instead of snapping.
 - **Event filters no longer cut off their text.** The row of small dropdowns is now one **Filters** button that opens a panel with each filter full-width and labelled. Active filters show as chips you can tap to remove.
 - **Fixed the sign-in card blinking.** On the welcome screen the card (team number, code, Open) could vanish for a moment and fade back in while you were typing. It now only animates in the first time, and tapping **Open** with a wrong code no longer redraws the screen behind it.
