@@ -1,0 +1,12 @@
+name = "vexrecon"
+pages_build_output_dir = "public"
+compatibility_date = "2025-01-01"
+
+# D1 database holding all of Recon's data (create it with `npx wrangler d1 create recon`, then paste its id here).
+[[d1_databases]]
+binding = "DB"
+database_name = "recon"
+database_id = "REPLACE-WITH-YOUR-D1-DATABASE-ID"
+
+# Secrets are not kept here. Set ROBOTEVENTS_KEY, ADMIN_CODE and (original install only) TEAM_CODE in the Cloudflare
+# dashboard (Workers & Pages -> vexrecon -> Settings -> Variables and Secrets), or in .dev.vars for local preview.

@@ -1,9 +1,9 @@
 # Recon (made by Invictus 52111A)
 
-Recon is a proprietary, multi-team VEX scouting app on Netlify: static client in `public/` (`index.html`, `app.js`,
-`app.css`, `tokens.css`, `sw.js`) and one serverless function, `netlify/functions/api.mjs`. Any team signs up with its
-VEX team number and shares a generated team code; each team's data lives in its own Netlify Blobs store. The
-function also holds the RobotEvents key. Preview locally with `netlify dev` (see README).
+Recon is a proprietary, multi-team VEX scouting app on Cloudflare Pages + D1: static client in `public/` (`index.html`, `app.js`,
+`app.css`, `tokens.css`, `sw.js`) and one Pages Function, `functions/api/[[path]].js`. Any team signs up with its
+VEX team number and shares a generated team code; each team's data lives in its own `<store>/…` collections of the D1 `docs` table (`schema.sql`). The
+function also holds the RobotEvents key. Preview locally with `npm run dev` (see README). Keep each request under the free plan's 50 external subrequests.
 
 ## Product rules
 - The product is called **Recon**. Invictus 52111A must always stay credited (welcome screen, About, README,

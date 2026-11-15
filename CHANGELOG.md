@@ -6,6 +6,10 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+### Changed
+- **Moved from Netlify to Cloudflare Pages + D1** (vexrecon.pages.dev). The app looks and works the same. Data now lives in a D1 database, so teams on the old site need to set up again and re-import their events (52111A can still sign in with its old code). Team codes are now stored with PBKDF2 instead of scrypt, and a full event import is kept under Cloudflare's free-plan limit of 50 requests.
+- Phones now check for teammates' changes every 10 seconds instead of every 3.
+
 ### Added
 - **Event finder filters and a faster finder.** Under the search box you can now narrow events by **region**, **level** and **date** (next 7 / 30 days, this month, or last 7 / 30 days on the Earlier tab), and **Hide added** hides events already in Recon. Event lists are now remembered for 10 minutes, so switching between Our events, Coming up and Earlier is instant, and searching a list you already loaded no longer asks the server again. While it loads you see a spinner and placeholder rows.
 - **Remove a scout.** Team settings now lists the team's scouts with a **Remove** button (tap twice to confirm), and an **Add a scout** box. Their saved notes stay.

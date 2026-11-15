@@ -17,8 +17,8 @@ echo.
 echo  Recon (vexRecon beta)
 echo  ---------------------
 echo  [1] Start Recon
-echo  [2] Download latest beta, then start  (keeps your .env)
-echo  [3] Fresh re-download of beta, then start  (deletes the old copy, keeps your .env)
+echo  [2] Download latest beta, then start  (keeps your .dev.vars)
+echo  [3] Fresh re-download of beta, then start  (deletes the old copy, keeps your .dev.vars)
 echo  [4] Quit
 echo.
 choice /c 1234 /n /m "Choose 1-4: "
@@ -37,7 +37,7 @@ if exist vexRecon\.git (
 )
 :: No git repo (zip install): fall through to a fresh download
 :fresh
-if exist vexRecon\.env copy /y vexRecon\.env env.backup >nul
+if exist vexRecon\.dev.vars copy /y vexRecon\.dev.vars env.backup >nul
 if exist vexRecon rmdir /s /q vexRecon
 :download
 where git >nul 2>nul
@@ -51,7 +51,7 @@ if not exist vexRecon (
   echo Download failed. Check your internet connection.
   pause & exit /b 1
 )
-if exist env.backup move /y env.backup vexRecon\.env >nul
+if exist env.backup move /y env.backup vexRecon\.dev.vars >nul
 call :install
 goto run
 
@@ -65,20 +65,18 @@ exit /b 0
 cd /d "%~dp0vexRecon"
 
 set "NEEDKEY="
-if not exist .env set "NEEDKEY=1"
-if exist .env (
-  findstr /r /c:"^ROBOTEVENTS_KEY=." .env >nul 2>nul || (findstr /c:"# key skipped" .env >nul 2>nul || set "NEEDKEY=1")
+if not exist .dev.vars set "NEEDKEY=1"
+if exist .dev.vars (
+  findstr /r /c:"^ROBOTEVENTS_KEY=." .dev.vars >nul 2>nul || (findstr /c:"# key skipped" .dev.vars >nul 2>nul || set "NEEDKEY=1")
 )
 if defined NEEDKEY call :askkey
 
 if not exist node_modules call npm install
-where netlify >nul 2>nul
-if errorlevel 1 call npm install -g netlify-cli
 
 echo.
 echo Starting Recon at http://localhost:8888
 start "" http://localhost:8888
-call netlify dev
+call npm run dev
 pause
 goto :eof
 
@@ -89,8 +87,8 @@ echo Paste your RobotEvents API key, or just press Enter to skip.
 echo Without a key, team numbers aren't checked and event import won't work.
 set "KEY="
 set /p "KEY=ROBOTEVENTS_KEY: "
-if exist .env (findstr /v /b /c:"ROBOTEVENTS_KEY=" /c:"# key skipped" .env > .env.tmp) else (type nul > .env.tmp)
-if defined KEY (>> .env.tmp echo ROBOTEVENTS_KEY=%KEY%) else (>> .env.tmp echo # key skipped)
-findstr /b /c:"ADMIN_CODE=" .env.tmp >nul 2>nul || >> .env.tmp echo ADMIN_CODE=test
-move /y .env.tmp .env >nul
+if exist .dev.vars (findstr /v /b /c:"ROBOTEVENTS_KEY=" /c:"# key skipped" .dev.vars > .dev.vars.tmp) else (type nul > .dev.vars.tmp)
+if defined KEY (>> .dev.vars.tmp echo ROBOTEVENTS_KEY=%KEY%) else (>> .dev.vars.tmp echo # key skipped)
+findstr /b /c:"ADMIN_CODE=" .dev.vars.tmp >nul 2>nul || >> .dev.vars.tmp echo ADMIN_CODE=test
+move /y .dev.vars.tmp .dev.vars >nul
 exit /b 0

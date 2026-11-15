@@ -47,39 +47,68 @@ can reset the code (see Admin).
 - Light and dark mode, animations that respect "reduce motion", installable (PWA).
 
 ## Hosting it (Invictus 52111A)
-Recon runs on Netlify: the page in `public/` and one function, `netlify/functions/api.mjs`, which stores each
-team's data in Netlify Blobs (one private store per team) and holds the VEX Events API key.
+Recon runs on Cloudflare Pages: the page in `public/`, one Pages Function (`functions/api/[[path]].js`) that answers
+`/api/*` and holds the VEX Events API key, and a D1 database (`schema.sql`) that stores every team's data, kept apart per team.
+The live site is **https://vexrecon.pages.dev**.
 
-Environment variables (Netlify → Site configuration → Environment variables):
+### Deploy to vexrecon.pages.dev
+Needs Node.js and a free Cloudflare account.
+
+1. Sign in and create the database (once):
+   ```
+   npm install
+   npx wrangler login
+   npx wrangler d1 create recon
+   ```
+   Copy the `database_id` it prints into `wrangler.toml`.
+2. Create the table:
+   ```
+   npm run db:remote
+   ```
+3. Create the Pages project (once) and deploy. The project name `vexrecon` is what makes the address `vexrecon.pages.dev`:
+   ```
+   npx wrangler pages project create vexrecon --production-branch main
+   npm run deploy
+   ```
+   (Or in the dashboard: Workers & Pages → Create → Pages → connect the GitHub repo, build command empty, output
+   directory `public`, then Settings → Bindings → add a D1 binding named `DB` pointing at `recon`.)
+4. Add the secrets: Workers & Pages → vexrecon → Settings → Variables and Secrets (or `npx wrangler pages secret put ROBOTEVENTS_KEY`).
+5. Deploy again so the variables take effect (`npm run deploy`, or retry the latest deployment in the dashboard).
 
 | Variable | |
 |---|---|
 | `ROBOTEVENTS_KEY` | VEX Events API key (secret). Needed to import events and to check team numbers at sign-up. |
 | `ADMIN_CODE` | Optional, secret. Lets the owner reset or remove a team (see below). |
-| `TEAM_CODE` | Only for the original single-team install: the old Invictus code. The first time 52111A signs in with it, the existing data is adopted as team 52111A's space. Can be removed afterwards. |
+| `TEAM_CODE` | Only for the original single-team install: the old Invictus code. The first time 52111A signs in with it, 52111A is set up as a team (its data space is `scout`). Can be removed afterwards. |
 | `LEGACY_TEAM`, `LEGACY_TEAM_NAME` | Optional overrides for that original team (default `52111A`, `Invictus`). |
 
-After changing variables: **Deploys → Trigger deploy**.
+**Moving over from Netlify.** Data kept in Netlify Blobs is not copied across: teams set up again (or sign in with their
+old code, for 52111A) and re-import their events. Scouting notes made on Netlify have to be exported from the old site first.
+
+**Free plan limits.** A request may make at most 50 calls to VEX Events and uses about 10 ms of CPU. A full event import
+makes 1 + (team pages) + (one per division) calls (24 for a 10-division, 700-team event) and gets the rankings on the next
+quick refresh if there are too many calls left. The team code check is kept light for the CPU limit (see Security notes).
+The phones check for changes every 10 seconds, which stays well inside D1's free reads.
 
 ### Admin
 If someone sets up a team number that isn't theirs, or a team has lost both its code and its recovery key:
 
 ```
-curl -X POST https://<your-site>/api/admin -H "content-type: application/json" \
+curl -X POST https://vexrecon.pages.dev/api/admin -H "content-type: application/json" \
   -d '{"adminCode":"<ADMIN_CODE>","team":"1234B","action":"reset"}'
 ```
 
-`reset` returns a new team code; `remove` deletes the team's sign-up (its data store is kept, so it can be
+`reset` returns a new team code; `remove` deletes the team's sign-up (its data is kept, so it can be
 restored).
 
 ### Security notes
-- Team codes are generated (8 characters, about 40 bits), stored only as salted scrypt hashes, and checked in
+- Team codes are generated (8 characters, about 40 bits), stored only as salted PBKDF2 hashes, and checked in
   constant time. The recovery key (16 characters, about 80 bits) is stored the same way. After 10 wrong codes or
   wrong recovery keys a team number is locked for 10 minutes.
 - The VEX Events key never reaches the browser.
 
 ## Preview on your PC
-Needs Node.js. Create `.env` in this folder:
+Needs Node.js. Create `.dev.vars` in this folder:
 ```
 ROBOTEVENTS_KEY=your-key
 ADMIN_CODE=anything
@@ -87,11 +116,11 @@ ADMIN_CODE=anything
 Then:
 ```
 npm install
-npm install -g netlify-cli
-netlify dev
+npm run dev
 ```
-Open http://localhost:8888 (or `http://<your PC's IP>:8888` on a phone on the same wifi). Without a real API key,
-team numbers aren't checked and event import won't work; add events, teams and matches by hand instead.
+Open http://localhost:8888 (or `http://<your PC's IP>:8888` on a phone on the same wifi). The data is kept in a local D1
+database under `.wrangler/`. Without a real API key, team numbers aren't checked and event import won't work; add events,
+teams and matches by hand instead.
 
 ## Licence
 Proprietary. Copyright © 2026 Invictus 52111A. All rights reserved. See [`LICENSE`](LICENSE).

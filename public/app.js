@@ -1,6 +1,6 @@
 'use strict';
 // Recon – client. Made by Invictus 52111A.
-// Data lives on the server (netlify/functions/api.mjs). Every change is applied locally straight away,
+// Data lives on the server (functions/api/[[path]].js). Every change is applied locally straight away,
 // queued in an outbox (kept in localStorage) and sent when there is a connection, so the app keeps
 // working on bad venue wifi. The last downloaded state is cached so the app also opens offline.
 
@@ -104,7 +104,7 @@ const statsAge = () => { const d = stDoc(); return d && d.t ? Date.now() - d.t :
 const myScouts = t => { const b = scoutBase(t, name); return S.notes.filter(n => n.kind === 'scout' && (n.id === b || n.id.startsWith(b + '_'))) };
 
 // ---------- sync ----------
-const NOTE_MS = 3000, RE_MS = 15000; // how often to check for teammates' changes / VEX Events (milliseconds)
+const NOTE_MS = 10000, RE_MS = 15000; // how often to check for teammates' changes / VEX Events (milliseconds)
 const API = '/api';
 class NetErr extends Error {}
 class AuthErr extends Error {}
