@@ -46,7 +46,7 @@ can reset the code (see Admin).
   event it has played and its awards. It comes from VEX Events for the whole season, so the event must be imported with its
   event code. The server loads it a few teams at a time (about a minute for a full event, 3 requests per team) the first
   time an event is opened and again once it is 6 hours old; **Refresh** on the Skills page loads it now.
-- **Robot photos**: on each team's page, up to 3 photos per team per event (camera or gallery), shared with your team. The phone
+- **Robot photos**: added while scouting (Robot section of the form) and shown on each team's page; up to 3 photos per team per event (camera or gallery), shared with your team. The phone
   shrinks each to about 150 KB before sending, and with no signal they wait and upload later. They sit in D1 in their own
   `photos` collection (no extra table or storage service, nothing to set up), are fetched only when a team's page opens, and are
   never shown to spectators. A team keeps photos for its 5 most recent events (by start date); older ones are deleted automatically.

@@ -472,6 +472,7 @@ function render() {
   else if (!mTeam) md.style.display = 'none';
   modalShown = !!mTeam;
   if (mTeam && mTeam[0] !== ':' && !spec && mTeam !== US && signedIn()) phLoad(mTeam);
+  else if (tab === 'scout' && scTeam && draft && !spec && scTeam !== US && signedIn()) phLoad(scTeam);
   seenNotes = new Set(S.notes.map(n => n.id));
   renderedAt = performance.now();
   ebKick();
@@ -862,7 +863,7 @@ function vScout() {
       fld('f_driveNotes', 'Driving notes', `<textarea id="f_driveNotes" data-f="driveNotes" placeholder="e.g. Plays good defence, but slow to get back to the scoring zone">${esc(d.driveNotes)}</textarea>`, 'How they drive, their strategy, mistakes, how well they play defence.'))}
     ${sect('Robot', 'The build itself.',
       fld('f_robotType', 'Robot type & design', `<input id="f_robotType" data-f="robotType" value="${esc(d.robotType)}" placeholder="e.g. 6-motor tank drive, roller intake, arm scorer">`, 'Drivetrain, intake and scoring mechanism.') +
-      fldR('speed', 'Speed', d.speed) + fldR('durability', 'Durability', d.durability, 'Will it survive a hard match?'))}
+      fldR('speed', 'Speed', d.speed) + fldR('durability', 'Durability', d.durability, 'Will it survive a hard match?') + photosField(scTeam))}
     ${sect('Scoring', 'How well they score during a match.',
       fldR('scoring', 'Scoring ability', d.scoring) +
       fldR('scoreSpeed', 'Scoring speed', d.scoreSpeed, 'How fast do they score during a match?') +
@@ -940,7 +941,7 @@ async function phLoad(num) {
   PH[k] = { list: cur ? cur.list : [], at: 0, busy: true };
   try { const d = await api('/photos', { eventId: ev, team: num }); PH[k] = { list: d.photos || [], at: Date.now() } }
   catch (e) { PH[k] = { list: cur ? cur.list : [], at: Date.now() - 20000 } }
-  if (mTeam === num) render();
+  if (mTeam === num || (tab === 'scout' && scTeam === num)) render();
 }
 async function phFlush() {
   if (phBusy || !code || spec) return; phBusy = true;
@@ -956,7 +957,7 @@ async function phFlush() {
       }
       pq.shift(); savePq();
     }
-  } finally { phBusy = false; if (mTeam) render(); setStatus() }
+  } finally { phBusy = false; if (mTeam || (tab === 'scout' && scTeam)) render(); setStatus() }
 }
 // Read the picture, turn it upright, scale it down and compress until it is small enough.
 async function phShrink(file) {
@@ -998,19 +999,22 @@ const phInput = (() => { // lives outside the page so a refresh can't drop it wh
   return i;
 })();
 function phPick(num, cam) { phFor = num; if (cam) phInput.setAttribute('capture', 'environment'); else phInput.removeAttribute('capture'); phInput.multiple = !cam; phInput.click() }
-function phView(id) {
-  const p = phList(mTeam).find(x => x.id === id); if (!p) return;
+function phView(id, num) {
+  const p = phList(num).find(x => x.id === id); if (!p) return;
   const d = document.createElement('div'); d.id = 'phv'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Robot photo'); d.tabIndex = -1;
   d.innerHTML = `<img src="${p.img}" alt="Robot photo of team ${esc(p.team)}"><button class="p" type="button">Close</button>`;
   const end = () => { document.removeEventListener('keydown', key, true); d.remove() }, key = e => { if (e.key === 'Escape') { e.stopPropagation(); end() } };
   d.addEventListener('click', end); document.addEventListener('keydown', key, true); document.body.appendChild(d); d.querySelector('button').focus();
 }
-function photosCard(num) {
-  const ph = phList(num), cur = PH[phKey(ev, num)], full = ph.length >= 3;
-  return `<div class="card"><h2>Robot photos</h2><p class="mut">Up to 3 per team. Photos are kept for your 5 most recent events, then removed.</p>
-  ${ph.length ? `<div class="phgrid">${ph.map(p => `<div class="ph"><button type="button" class="phimg" data-act="phview" data-id="${esc(p.id)}" aria-label="View photo"><img src="${p.img}" alt="Robot photo of team ${esc(p.team)}" loading="lazy"></button>${p.wait ? '<span class="phwait">Waiting to send</span>' : `<button type="button" class="x" data-act="phdel" data-id="${esc(p.id)}" aria-label="Delete photo">×</button>`}</div>`).join('')}</div>` : `<p class="mut">${cur && cur.busy ? 'Loading photos…' : 'No photos yet.'}</p>`}
-  <div class="foot"><button data-act="phgal" data-t="${esc(num)}" ${full ? 'disabled' : ''}>From gallery</button><button class="p" data-act="phcam" data-t="${esc(num)}" ${full ? 'disabled' : ''}>Take photo</button></div></div>`;
+function photosInner(num) {
+  const ph = phList(num), cur = PH[phKey(ev, num)], full = ph.length >= 3, t = esc(num);
+  return `${ph.length ? `<div class="phgrid">${ph.map(p => `<div class="pht"><button type="button" class="phimg" data-act="phview" data-id="${esc(p.id)}" data-t="${t}" aria-label="View photo"><img src="${p.img}" alt="Robot photo of team ${t}" loading="lazy"></button>${p.wait ? '<span class="phwait">Waiting to send</span>' : `<button type="button" class="x" data-act="phdel" data-id="${esc(p.id)}" data-t="${t}" aria-label="Delete photo">×</button>`}</div>`).join('')}</div>` : `<p class="mut">${cur && cur.busy ? 'Loading photos…' : 'No photos yet.'}</p>`}
+  <div class="foot"><button data-act="phgal" data-t="${t}" ${full ? 'disabled' : ''}>From gallery</button><button data-act="phcam" data-t="${t}" ${full ? 'disabled' : ''}>Take photo</button></div>`;
 }
+const photosNote = 'Up to 3 per team. Photos are kept for your 5 most recent events, then removed.';
+// On a team's page: its own card. In the scouting form: a block inside the Robot section.
+const photosCard = num => `<div class="card"><h2>Robot photos</h2><p class="mut">${photosNote}</p>${photosInner(num)}</div>`;
+const photosField = num => `<div class="ff"><div class="lbl">Robot photos</div><div class="mut hint">Take a picture of their robot. ${photosNote}</div>${photosInner(num)}</div>`;
 
 // Everything the VEX app shows for a team, for the whole season: skills, record, event history, awards.
 function seasonCard(num) {
@@ -1254,9 +1258,9 @@ document.addEventListener('click', e => {
   else if (a === 'team') { mTeam = b.dataset.t; render() }
   else if (a === 'phcam') phPick(b.dataset.t, true)
   else if (a === 'phgal') phPick(b.dataset.t, false)
-  else if (a === 'phview') phView(b.dataset.id)
+  else if (a === 'phview') phView(b.dataset.id, b.dataset.t)
   else if (a === 'phdel') {
-    const id = b.dataset.id, t = mTeam;
+    const id = b.dataset.id, t = b.dataset.t;
     ask('Delete this photo?', 'It is removed for everyone on your team.', 'Delete').then(async ok => {
       if (!ok) return;
       try { await api('/photo', { mode: 'delete', id }); const e = PH[phKey(ev, t)]; if (e) e.list = e.list.filter(x => x.id !== id); render() }

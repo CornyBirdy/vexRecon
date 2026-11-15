@@ -7,7 +7,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 ## [Unreleased]
 
 ### Added
-- **Robot photos.** A team's page has a new **Robot photos** card with **Take photo** and **From gallery** buttons. Up to 3 photos per team per event, shared with your whole team. Tap a photo to see it full size; the × deletes it (needs a connection). Photos are shrunk on the phone first (a 5 MB picture becomes about 180 KB), so they use very little of the free database space. With no signal a photo waits on the phone ("Waiting to send") and uploads when you're back online. Spectators never see them.
+- **Robot photos.** When you scout a team, the **Robot** section of the scouting form has **Take photo** and **From gallery** buttons, so you can add a picture of their robot as you scout. The same photos also show on the team's page, in a new **Robot photos** card. Up to 3 photos per team per event, shared with your whole team. Tap a photo to see it full size; the × deletes it (needs a connection). Photos are shrunk on the phone first (a 5 MB picture becomes about 180 KB), so they use very little of the free database space. With no signal a photo waits on the phone ("Waiting to send") and uploads when you're back online. Spectators never see them.
 - **Photos clear themselves.** A team keeps photos for its **5 most recent events**; when a sixth event is added, the oldest event's photos are removed. Deleting an event removes its photos too.
 
 ### Changed
