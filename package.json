@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "db:local": "wrangler d1 execute recon --local --file=schema.sql",
-    "db:remote": "wrangler d1 execute recon --remote --file=schema.sql",
+    "db:local": "wrangler d1 execute vexrecon --local --file=schema.sql",
+    "db:remote": "wrangler d1 execute vexrecon --remote --file=schema.sql",
     "dev": "npm run db:local && wrangler pages dev --port 8888",
     "deploy": "wrangler pages deploy"
   },

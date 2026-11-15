@@ -58,9 +58,9 @@ Needs Node.js and a free Cloudflare account.
    ```
    npm install
    npx wrangler login
-   npx wrangler d1 create recon
+   npx wrangler d1 create vexrecon
    ```
-   Copy the `database_id` it prints into `wrangler.toml`.
+   (Already done for this project: `wrangler.toml` has the `vexrecon` database id.) Otherwise copy the `database_id` it prints into `wrangler.toml`.
 2. Create the table:
    ```
    npm run db:remote
@@ -71,7 +71,7 @@ Needs Node.js and a free Cloudflare account.
    npm run deploy
    ```
    (Or in the dashboard: Workers & Pages → Create → Pages → connect the GitHub repo, build command empty, output
-   directory `public`, then Settings → Bindings → add a D1 binding named `DB` pointing at `recon`.)
+   directory `public`, then Settings → Bindings → add a D1 binding named `DB` pointing at `vexrecon`.)
 4. Add the secrets: Workers & Pages → vexrecon → Settings → Variables and Secrets (or `npx wrangler pages secret put ROBOTEVENTS_KEY`).
 5. Deploy again so the variables take effect (`npm run deploy`, or retry the latest deployment in the dashboard).
 
