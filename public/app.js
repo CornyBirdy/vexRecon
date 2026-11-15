@@ -352,17 +352,20 @@ const fresh = n => seenNotes && !seenNotes.has(n.id) ? 'fresh' : '';
 // A real slide: the old content is kept as a ghost that travels out while the new content travels the whole way in.
 let segClicked = null;
 const SLIDE_MS = 440, SLIDE_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)', SLIDE_GAP = 16;
-function ghostMake(els, rect) {
+// rect: where the old content sits; clip: the column it must stay inside while it slides (so nothing leaks into the side margins on a wide screen)
+function ghostMake(els, rect, clip) {
   const g = document.createElement('div'); g.className = 'ghost'; g.setAttribute('aria-hidden', 'true');
-  g.style.left = rect.left + 'px'; g.style.top = rect.top + 'px'; g.style.width = rect.width + 'px';
-  els.forEach(e => g.appendChild(e.cloneNode(true)));
+  g.style.left = clip.left + 'px'; g.style.width = clip.width + 'px'; g.style.top = rect.top + 'px';
+  const gin = document.createElement('div'); gin.className = 'gin'; gin.style.marginLeft = (rect.left - clip.left) + 'px'; gin.style.width = rect.width + 'px';
+  els.forEach(e => gin.appendChild(e.cloneNode(true)));
+  g.appendChild(gin);
   g.querySelectorAll('[id]').forEach(e => e.removeAttribute('id')); g.querySelectorAll('[data-act]').forEach(e => e.removeAttribute('data-act'));
   document.body.appendChild(g); setTimeout(() => g.remove(), SLIDE_MS + 400); return g;
 }
 const slideDist = w => w + SLIDE_GAP; // the pages sit side by side with a small gap, so they never overlap
 function ghostGo(g, dir, d) {
   const root = document.documentElement; root.style.overflowX = 'clip'; setTimeout(() => { root.style.overflowX = '' }, SLIDE_MS + 60);
-  const a = g.animate([{ transform: 'none' }, { transform: `translateX(${-dir * d}px)` }], { duration: SLIDE_MS, easing: SLIDE_EASE, fill: 'forwards' });
+  const a = g.firstChild.animate([{ transform: 'none' }, { transform: `translateX(${-dir * d}px)` }], { duration: SLIDE_MS, easing: SLIDE_EASE, fill: 'forwards' });
   a.onfinish = a.oncancel = () => g.remove();
 }
 const slideIn = (el, dir, d) => el.animate([{ transform: `translateX(${dir * d}px)` }, { transform: 'none' }], { duration: SLIDE_MS, easing: SLIDE_EASE, fill: 'backwards' });
@@ -412,10 +415,13 @@ function render() {
   if (keepScroll && !reduced()) document.body.style.minHeight = oldH + 'px'; // hold the old height so the scroll position survives the redraw
   let ghost = null; const appEl = $('#app'), appRect = appEl.getBoundingClientRect();
   if (!reduced() && lastView) {
-    if (!same && (navAnim === 'fwd' || navAnim === 'back')) ghost = ghostMake([...appEl.children], appRect);
+    if (!same && (navAnim === 'fwd' || navAnim === 'back')) {
+      const cs = getComputedStyle(appEl), pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0, pt = parseFloat(cs.paddingTop) || 0;
+      ghost = ghostMake([...appEl.children], { left: appRect.left + pl, top: appRect.top + pt, width: appRect.width - pl - pr }, appRect);
+    }
     else if (segClicked && SEG_SLIDE.has(segClicked)) {
       const sg = appEl.querySelector(`.seg[data-seg="${segClicked}"]`), sibs = []; for (let n = sg && sg.nextElementSibling; n; n = n.nextElementSibling) sibs.push(n);
-      if (sibs.length) { const r0 = sibs[0].getBoundingClientRect(); ghost = ghostMake(sibs, { left: r0.left, top: r0.top, width: r0.width }); ghost.dataset.seg = segClicked }
+      if (sibs.length) { const r0 = sibs[0].getBoundingClientRect(); ghost = ghostMake(sibs, { left: r0.left, top: r0.top, width: r0.width }, appRect); ghost.dataset.seg = segClicked }
     }
   }
   $('#app').innerHTML = ({ event: vEvent, matches: vMatches, scout: vScout, pick: vPick })[tab]();

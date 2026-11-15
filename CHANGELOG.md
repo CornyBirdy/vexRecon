@@ -38,6 +38,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ### Changed
 - **Pages slide like a carousel.** Changing tab or switching (Teams / Rankings / Skills / More, Our matches / All matches, To scout / All teams and so on) now moves the old page out and the new page in side by side at the same speed, with no fading, while the header and tab bar stay put. Going the other way slides the other way.
+- **Slides stay inside the app column on wide screens.** On a computer the old and new page no longer travel across the empty margins beside the app; they slide within the column. Matches' single stat card also spans the full width on a computer instead of leaving half of it empty.
 - **Alliance blocks read red and blue.** Your own alliance's block is a clear red or blue (it had a green cast), with the coloured top bar on both.
 - **Old wordmark back, green tint gone.** The italic RECON lettering is back next to the new viewfinder mark. The alliance blocks and your match cards no longer have a greenish tint: red alliance is red, blue is blue, and cards are neutral.
 - **Glassy controls.** Buttons, pills, round icon buttons, the chosen item in switches and tabs, and floating bars now look like frosted acrylic: a translucent sheen, a lit top edge and a soft blur over whatever is behind them, in both dark and light. The main action is a glassy accent button.
