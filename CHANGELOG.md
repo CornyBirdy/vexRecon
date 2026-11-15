@@ -37,7 +37,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
   The stats load the first time an event is opened and again once they are 6 hours old; **Refresh** loads them now.
 
 ### Changed
-- **A proper slide.** Changing tab or switching (Teams / Rankings / Skills / More, Our matches / All matches, To scout / All teams and so on) now carries the old content off to one side while the new content travels in the whole width from the other, over about half a second, so it feels like sliding over, not a short fade. Going the other way slides the other way.
+- **Pages slide like a carousel.** Changing tab or switching (Teams / Rankings / Skills / More, Our matches / All matches, To scout / All teams and so on) now moves the old page out and the new page in side by side at the same speed, with no fading, while the header and tab bar stay put. Going the other way slides the other way.
 - **Alliance blocks read red and blue.** Your own alliance's block is a clear red or blue (it had a green cast), with the coloured top bar on both.
 - **Old wordmark back, green tint gone.** The italic RECON lettering is back next to the new viewfinder mark. The alliance blocks and your match cards no longer have a greenish tint: red alliance is red, blue is blue, and cards are neutral.
 - **Glassy controls.** Buttons, pills, round icon buttons, the chosen item in switches and tabs, and floating bars now look like frosted acrylic: a translucent sheen, a lit top edge and a soft blur over whatever is behind them, in both dark and light. The main action is a glassy accent button.
@@ -70,6 +70,8 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ### Fixed
 - Switching between Teams, Rankings, Skills, More (and Our matches / All matches, To scout / All teams) no longer jumps back to the top of the page. It stays where you were. Changing the main tab still starts at the top.
+- When the page you switch to is shorter than how far you had scrolled, the page now glides up to its bottom instead of snapping.
+- The tab bar's sliding highlight no longer shows a second, overlapping shape behind it while you hover the tab you are switching to (the same for the switches).
 - The page's entrance animation no longer replays on every redraw (a new note or a sync used to make the team list's rows re-appear).
 - **Importing newer event codes.** Codes like `VE-V5-26-66510` (not just `RE-V5RC-26-5068`) are now accepted, and you
   can paste the whole event page link (even with `#general-info` on the end); the code is picked out of it. If there's

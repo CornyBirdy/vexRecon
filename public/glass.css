@@ -297,3 +297,9 @@ nav { background: var(--g-fill), var(--g-bar); box-shadow: var(--g-edge), 0 14px
 .ghost { position: fixed; z-index: 4; pointer-events: none; will-change: transform, opacity; }
 #app.enter-fwd, #app.enter-back { animation: none; }
 #app.enter-fwd .trow, #app.enter-back .trow, #app.enter-fwd .homehero, #app.enter-back .homehero { animation: none; }
+
+/* the hovered tab or switch item must not draw its own pill under the gliding one */
+nav button:hover, .seg button:hover { background: transparent !important; filter: none !important; }
+nav button:hover { color: var(--ink); }
+html, body, #app { overflow-anchor: none; }
+html, body { overflow-x: clip; }

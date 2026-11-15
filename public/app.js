@@ -318,6 +318,20 @@ function flipPlay(m) {
   if (reduced()) return;
   document.querySelectorAll('#app [data-flip]').forEach(e => { const t = m.get(e.dataset.flip); if (t == null) return; const dy = t - e.getBoundingClientRect().top; if (Math.abs(dy) > 1) e.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.7,.2,1)' }) });
 }
+let scrollAnim = 0;
+function easeScroll(to) {
+  const from = scrollY, t0 = performance.now(), id = ++scrollAnim, dur = 420;
+  const step = t => { if (id !== scrollAnim) return; const p = Math.min(1, (t - t0) / dur); scrollTo({ top: from + (to - from) * (1 - Math.pow(1 - p, 3)), behavior: 'instant' }); if (p < 1) requestAnimationFrame(step); else document.body.style.minHeight = '' };
+  requestAnimationFrame(step);
+}
+// the browser nudges the scroll position when a big card starts sliding, so hold it where it was for the length of the slide
+function pinScroll(y) {
+  const id = ++scrollAnim, t0 = performance.now();
+  const f = t => { if (id !== scrollAnim) return; if (Math.abs(scrollY - y) > 1) scrollTo({ top: y, behavior: 'instant' }); if (t - t0 < SLIDE_MS + 80) requestAnimationFrame(f) };
+  requestAnimationFrame(f);
+}
+const stopScroll = () => { scrollAnim++; document.body.style.minHeight = '' };
+['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(ev => addEventListener(ev, stopScroll, { passive: true }));
 let enterT;
 const ENTER = ['enter', 'enter-fwd', 'enter-back', 'enter-up'];
 // the enter class is dropped once the page has arrived, so later redraws (a new note, a sync) don't replay it
@@ -337,7 +351,7 @@ const fresh = n => seenNotes && !seenNotes.has(n.id) ? 'fresh' : '';
 
 // A real slide: the old content is kept as a ghost that travels out while the new content travels the whole way in.
 let segClicked = null;
-const SLIDE_MS = 520, SLIDE_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+const SLIDE_MS = 440, SLIDE_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)', SLIDE_GAP = 16;
 function ghostMake(els, rect) {
   const g = document.createElement('div'); g.className = 'ghost'; g.setAttribute('aria-hidden', 'true');
   g.style.left = rect.left + 'px'; g.style.top = rect.top + 'px'; g.style.width = rect.width + 'px';
@@ -345,13 +359,13 @@ function ghostMake(els, rect) {
   g.querySelectorAll('[id]').forEach(e => e.removeAttribute('id')); g.querySelectorAll('[data-act]').forEach(e => e.removeAttribute('data-act'));
   document.body.appendChild(g); setTimeout(() => g.remove(), SLIDE_MS + 400); return g;
 }
-const slideDist = w => Math.min(w, 520);
+const slideDist = w => w + SLIDE_GAP; // the pages sit side by side with a small gap, so they never overlap
 function ghostGo(g, dir, d) {
   const root = document.documentElement; root.style.overflowX = 'clip'; setTimeout(() => { root.style.overflowX = '' }, SLIDE_MS + 60);
-  const a = g.animate([{ transform: 'none', opacity: 1 }, { transform: `translateX(${-dir * d * 0.5}px)`, opacity: 0 }], { duration: SLIDE_MS * 0.8, easing: 'cubic-bezier(0.5, 0, 0.75, 0)', fill: 'forwards' });
+  const a = g.animate([{ transform: 'none' }, { transform: `translateX(${-dir * d}px)` }], { duration: SLIDE_MS, easing: SLIDE_EASE, fill: 'forwards' });
   a.onfinish = a.oncancel = () => g.remove();
 }
-const slideIn = (el, dir, d, delay = 0) => el.animate([{ transform: `translateX(${dir * d}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: SLIDE_MS, delay, easing: SLIDE_EASE, fill: 'backwards' });
+const slideIn = (el, dir, d) => el.animate([{ transform: `translateX(${dir * d}px)` }, { transform: 'none' }], { duration: SLIDE_MS, easing: SLIDE_EASE, fill: 'backwards' });
 
 // Segmented controls: one highlight that glides to the chosen item, and the content under it slides the way you went.
 const SEG_SLIDE = new Set(['mfilter', 'sfilter', 'tview', 'sksope', 'ebscope', 'wmode']);
@@ -372,7 +386,7 @@ function segPlace(snap, ghost) {
     if (!SEG_SLIDE.has(s.dataset.seg)) return;
     const dir = i > from.i ? 1 : -1, d = slideDist(s.getBoundingClientRect().width); let n = s.nextElementSibling, k = 0;
     if (ghost && ghost.dataset.seg === s.dataset.seg) ghostGo(ghost, dir, d);
-    while (n) { slideIn(n, dir, d, Math.min(k, 4) * 35); n = n.nextElementSibling; k++ }
+    while (n) { slideIn(n, dir, d); n = n.nextElementSibling; k++ }
   });
 }
 window.addEventListener('resize', () => segPlace());
@@ -394,6 +408,8 @@ function render() {
   let pill = nav.querySelector('.navpill'); if (!pill) { pill = document.createElement('i'); pill.className = 'navpill'; nav.prepend(pill) }
   const onb = nav.querySelector('button.on'); if (onb) { pill.style.width = onb.offsetWidth + 'px'; pill.style.transform = `translateX(${onb.offsetLeft}px)`; pill.style.opacity = 1 }
   const key = viewKey(), same = key === lastView, before = same ? flipCapture() : null, y = scrollY, sb = segSnap();
+  const keepScroll = same || navAnim === 'seg' || (segClicked && SEG_SLIDE.has(segClicked)), oldH = document.documentElement.scrollHeight;
+  if (keepScroll && !reduced()) document.body.style.minHeight = oldH + 'px'; // hold the old height so the scroll position survives the redraw
   let ghost = null; const appEl = $('#app'), appRect = appEl.getBoundingClientRect();
   if (!reduced() && lastView) {
     if (!same && (navAnim === 'fwd' || navAnim === 'back')) ghost = ghostMake([...appEl.children], appRect);
@@ -403,11 +419,16 @@ function render() {
     }
   }
   $('#app').innerHTML = ({ event: vEvent, matches: vMatches, scout: vScout, pick: vPick })[tab]();
-  scrollTo({ top: same || navAnim === 'seg' ? y : 0, behavior: 'instant' });
+  scrollTo({ top: keepScroll ? y : 0, behavior: 'instant' });
+  if (keepScroll && !reduced()) { // a shorter page: glide up to its bottom instead of snapping
+    document.body.style.minHeight = ''; const max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+    if (y > max + 2) { document.body.style.minHeight = oldH + 'px'; scrollTo({ top: y, behavior: 'instant' }); easeScroll(max) } else pinScroll(y);
+  }
   if (same) flipPlay(before); else if (lastView && !reduced() && navAnim !== 'seg') replay($('#app'), 'enter' + (navAnim ? '-' + navAnim : ''));
   if (ghost && !ghost.dataset.seg) { const dir = navAnim === 'fwd' ? 1 : -1, d = slideDist(appRect.width); ghostGo(ghost, dir, d); slideIn($('#app'), dir, d) }
   navAnim = '';
   segPlace(sb, ghost); segClicked = null;
+  if (keepScroll && !reduced()) { void document.documentElement.scrollHeight; if (Math.abs(scrollY - y) > 1) scrollTo({ top: y, behavior: 'instant' }) }
   if (ghost && ghost.dataset.seg && !ghost.getAnimations().length) ghost.remove();
   if (!same) for (const k in lastCounts) delete lastCounts[k];
   lastView = key; justOpened = null; countUp();
