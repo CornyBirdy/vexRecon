@@ -610,6 +610,37 @@ function recStat(ours) {
     chip: done.length ? delta(Math.round(w / done.length * 100) + '% won', w * 2 >= done.length) : '', cap: done.length ? 'matches won so far' : (spec ? 'Matches show up' : 'Your matches show up') + ' once scoring starts',
     viz: cols.length ? dotMatrix(cols.map(c => ({ h: Math.max(1, Math.round(c.a / max * 7)), cls: c.cls })), 7, 'Our score in each match: green for a win, red for a loss, amber for a tie') : '' });
 }
+// ---------- Agenda ----------
+// The day's schedule (registration, inspection, matches begin ...), typed in by the team and shared with it (and with spectators).
+// Kept on the event as e.agenda = [{ id, d: 'YYYY-MM-DD', t: 'HH:MM', x: title, n: note }]; times are the clock times as typed, shown in the device's format.
+let agEdit = false;
+const dayKey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const agDate = (d, t) => { const [y, m, dd] = d.split('-').map(Number), [h, mi] = String(t || '0:0').split(':').map(Number); return new Date(y, m - 1, dd, h || 0, mi || 0) };
+const agTime = (d, t) => agDate(d, t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function agDayName(d, today) {
+  const diff = Math.round((agDate(d, '12:00') - agDate(today, '12:00')) / 864e5);
+  return diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : diff === -1 ? 'Yesterday' : agDate(d, '12:00').toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' });
+}
+const AG_IDEAS = ['Registration opens', 'Robot inspection', 'Drivers meeting', 'Opening ceremony', 'Matches begin', 'Lunch break', 'Alliance selection', 'Finals', 'Awards ceremony', 'Close'];
+function agendaCard(e) {
+  const list = (Array.isArray(e.agenda) ? e.agenda : []).slice().sort((a, b) => (a.d + a.t).localeCompare(b.d + b.t)), edit = agEdit && !spec;
+  if (!list.length && !edit && spec) return '';
+  const now = new Date(), today = dayKey(now), days = [...new Set(list.map(i => i.d))];
+  const shown = edit ? days : (days.filter(d => d >= today).length ? days.filter(d => d >= today) : days.slice(-1)); // upcoming days; if it's all over, the last day
+  const cur = list.filter(i => i.d === today && agDate(i.d, i.t) <= now).pop(); // the latest item that has started today
+  const rows = shown.map(d => `<div class="agday">${esc(agDayName(d, today))}</div><ul class="ag">${list.filter(i => i.d === d).map(i => {
+    const past = agDate(i.d, i.t) < now && i !== cur;
+    return `<li class="${i === cur ? 'now' : past ? 'past' : ''}"><span class="agt">${esc(agTime(i.d, i.t))}</span><span class="agc"><span class="agd"></span></span><div class="agb">${esc(i.x)}${i === cur ? ' <span class="pill">Now</span>' : ''}${i.n ? `<span class="mut">${esc(i.n)}</span>` : ''}</div>${edit ? `<button type="button" class="x" data-act="agdel" data-id="${esc(i.id)}" aria-label="Delete ${esc(i.x)}">×</button>` : '<span></span>'}</li>`;
+  }).join('')}</ul>`).join('');
+  const defDay = e.start && e.end && today >= String(e.start).slice(0, 10) && today <= String(e.end).slice(0, 10) ? today : (String(e.start || '').slice(0, 10) || today);
+  const form = edit ? `<div class="agadd"><div class="row"><input id="ag_d" type="date" value="${esc(defDay)}" aria-label="Day"><input id="ag_t" type="time" aria-label="Time"></div>
+    <input id="ag_x" list="ag_ideas" placeholder="What happens, e.g. Matches begin" maxlength="80" aria-label="What happens" autocomplete="off"><datalist id="ag_ideas">${AG_IDEAS.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+    <input id="ag_n" placeholder="Note (optional)" maxlength="160" aria-label="Note">
+    <div class="foot"><button class="p" data-act="agadd">Add to agenda</button></div></div>` : '';
+  const head = `<div class="nhead"><h2>Agenda</h2>${spec ? '' : `<button class="link" data-act="agedit">${edit ? 'Done' : list.length ? 'Edit' : 'Add'}</button>`}</div>`;
+  const empty_ = !list.length && !edit ? '<p class="mut">Add the day’s schedule, like when registration opens, inspection and matches begin, and everyone on the team can see it here.</p>' : '';
+  return `<div class="card agenda">${head}${rows}${empty_}${form}</div>`;
+}
 // Home: a status line, our rank as the big number and the next match we play (the tab bar does the navigating).
 function vHome() {
   const e = evObj(); if (!e) return '';
@@ -624,7 +655,7 @@ function vHome() {
   }
   return `<div class="home"><div class="greet"><div><p class="live ${stat.cls}">${stat.html}</p><h1>${spec ? esc(teamInfo.name || US) : esc(name || US)}${!spec && name ? ' <button class="link namechg" data-act="setname" data-v="">Change</button>' : ''}</h1></div></div>
   <section class="panel"><div class="phead"><h2>Event overview</h2></div>${rankStat(st, me, ts)}${recStat(ours)}</section>
-  ${nx}</div>`;
+  ${nx}${agendaCard(e)}</div>`;
 }
 
 function vEvent() {
@@ -1256,6 +1287,14 @@ document.addEventListener('click', e => {
   else if (a === 'import') doImport(v('sku'), sayIn('impmsg'));
   else if (a === 'reimport') { if (spec) { const s = skuOf(evObj()), say = sayIn('impmsg2'); say('Checking…'); api('/import', { sku: s, light: true }).then(() => pull()).then(() => say('')).catch(e => say('Couldn’t check: ' + String(e.message || e).slice(0, 100))) } else doImport(skuOf(evObj()), sayIn('impmsg2')) }
   else if (a === 'team') { mTeam = b.dataset.t; render() }
+  else if (a === 'agedit') { agEdit = !agEdit; render() }
+  else if (a === 'agadd') {
+    const d = v('ag_d'), t = v('ag_t'), x = v('ag_x'), n = v('ag_n'), e = evObj(), cur = Array.isArray(e.agenda) ? e.agenda : [];
+    if (!d || !t || !x) { toast('Add a day, a time and what happens.'); return }
+    if (cur.length >= 60) { toast('The agenda is full. Delete something first.'); return }
+    upd('events', ev, { agenda: [...cur, { id: uid(), d, t, x, ...(n ? { n } : {}) }] });
+  }
+  else if (a === 'agdel') { const e = evObj(); upd('events', ev, { agenda: (e.agenda || []).filter(i => i.id !== b.dataset.id) }) }
   else if (a === 'phcam') phPick(b.dataset.t, true)
   else if (a === 'phgal') phPick(b.dataset.t, false)
   else if (a === 'phview') phView(b.dataset.id, b.dataset.t)
