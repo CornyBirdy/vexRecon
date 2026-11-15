@@ -292,3 +292,8 @@ nav { background: var(--g-fill), var(--g-bar); box-shadow: var(--g-edge), 0 14px
 #sync { background: var(--sunken); }
 
 .wordmark { line-height: 0; }
+
+/* ===== A real slide: the old content leaves as a ghost while the new content travels in ===== */
+.ghost { position: fixed; z-index: 4; pointer-events: none; will-change: transform, opacity; }
+#app.enter-fwd, #app.enter-back { animation: none; }
+#app.enter-fwd .trow, #app.enter-back .trow, #app.enter-fwd .homehero, #app.enter-back .homehero { animation: none; }

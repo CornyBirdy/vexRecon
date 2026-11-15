@@ -335,6 +335,24 @@ function countUp() {
 function flash(el) { if (!el || reduced()) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash') }
 const fresh = n => seenNotes && !seenNotes.has(n.id) ? 'fresh' : '';
 
+// A real slide: the old content is kept as a ghost that travels out while the new content travels the whole way in.
+let segClicked = null;
+const SLIDE_MS = 520, SLIDE_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+function ghostMake(els, rect) {
+  const g = document.createElement('div'); g.className = 'ghost'; g.setAttribute('aria-hidden', 'true');
+  g.style.left = rect.left + 'px'; g.style.top = rect.top + 'px'; g.style.width = rect.width + 'px';
+  els.forEach(e => g.appendChild(e.cloneNode(true)));
+  g.querySelectorAll('[id]').forEach(e => e.removeAttribute('id')); g.querySelectorAll('[data-act]').forEach(e => e.removeAttribute('data-act'));
+  document.body.appendChild(g); setTimeout(() => g.remove(), SLIDE_MS + 400); return g;
+}
+const slideDist = w => Math.min(w, 520);
+function ghostGo(g, dir, d) {
+  const root = document.documentElement; root.style.overflowX = 'clip'; setTimeout(() => { root.style.overflowX = '' }, SLIDE_MS + 60);
+  const a = g.animate([{ transform: 'none', opacity: 1 }, { transform: `translateX(${-dir * d * 0.5}px)`, opacity: 0 }], { duration: SLIDE_MS * 0.8, easing: 'cubic-bezier(0.5, 0, 0.75, 0)', fill: 'forwards' });
+  a.onfinish = a.oncancel = () => g.remove();
+}
+const slideIn = (el, dir, d, delay = 0) => el.animate([{ transform: `translateX(${dir * d}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: SLIDE_MS, delay, easing: SLIDE_EASE, fill: 'backwards' });
+
 // Segmented controls: one highlight that glides to the chosen item, and the content under it slides the way you went.
 const SEG_SLIDE = new Set(['mfilter', 'sfilter', 'tview', 'sksope', 'ebscope', 'wmode']);
 const segBtns = s => [...s.querySelectorAll(':scope > button')];
@@ -343,7 +361,7 @@ function segSnap() {
   document.querySelectorAll('#app .seg[data-seg]').forEach(s => { const bs = segBtns(s), i = bs.findIndex(b => b.classList.contains('on')); if (i >= 0 && bs[i].offsetWidth) m[s.dataset.seg] = { i, l: bs[i].offsetLeft, w: bs[i].offsetWidth } });
   return m;
 }
-function segPlace(snap) {
+function segPlace(snap, ghost) {
   document.querySelectorAll('#app .seg[data-seg]').forEach(s => {
     const bs = segBtns(s), i = bs.findIndex(b => b.classList.contains('on')), b = bs[i];
     if (!b || !b.offsetWidth) return; // folded away: placed when it opens
@@ -352,8 +370,9 @@ function segPlace(snap) {
     const from = snap && snap[s.dataset.seg]; if (!from || from.i === i || reduced()) return;
     p.animate([{ width: from.w + 'px', transform: `translateX(${from.l}px)` }, { width: w + 'px', transform: `translateX(${l}px)` }], { duration: 440, easing: 'cubic-bezier(0.34, 1.4, 0.64, 1)' });
     if (!SEG_SLIDE.has(s.dataset.seg)) return;
-    const dir = i > from.i ? 1 : -1; let n = s.nextElementSibling, k = 0;
-    while (n) { n.animate([{ opacity: 0, transform: `translateX(${dir * 36}px)` }, { opacity: 1, transform: 'none' }], { duration: 380, delay: Math.min(k, 5) * 40, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'backwards' }); n = n.nextElementSibling; k++ }
+    const dir = i > from.i ? 1 : -1, d = slideDist(s.getBoundingClientRect().width); let n = s.nextElementSibling, k = 0;
+    if (ghost && ghost.dataset.seg === s.dataset.seg) ghostGo(ghost, dir, d);
+    while (n) { slideIn(n, dir, d, Math.min(k, 4) * 35); n = n.nextElementSibling; k++ }
   });
 }
 window.addEventListener('resize', () => segPlace());
@@ -375,10 +394,21 @@ function render() {
   let pill = nav.querySelector('.navpill'); if (!pill) { pill = document.createElement('i'); pill.className = 'navpill'; nav.prepend(pill) }
   const onb = nav.querySelector('button.on'); if (onb) { pill.style.width = onb.offsetWidth + 'px'; pill.style.transform = `translateX(${onb.offsetLeft}px)`; pill.style.opacity = 1 }
   const key = viewKey(), same = key === lastView, before = same ? flipCapture() : null, y = scrollY, sb = segSnap();
+  let ghost = null; const appEl = $('#app'), appRect = appEl.getBoundingClientRect();
+  if (!reduced() && lastView) {
+    if (!same && (navAnim === 'fwd' || navAnim === 'back')) ghost = ghostMake([...appEl.children], appRect);
+    else if (segClicked && SEG_SLIDE.has(segClicked)) {
+      const sg = appEl.querySelector(`.seg[data-seg="${segClicked}"]`), sibs = []; for (let n = sg && sg.nextElementSibling; n; n = n.nextElementSibling) sibs.push(n);
+      if (sibs.length) { const r0 = sibs[0].getBoundingClientRect(); ghost = ghostMake(sibs, { left: r0.left, top: r0.top, width: r0.width }); ghost.dataset.seg = segClicked }
+    }
+  }
   $('#app').innerHTML = ({ event: vEvent, matches: vMatches, scout: vScout, pick: vPick })[tab]();
-  scrollTo({ top: same ? y : 0, behavior: 'instant' });
-  if (same) flipPlay(before); else if (lastView && !reduced() && navAnim !== 'seg') replay($('#app'), 'enter' + (navAnim ? '-' + navAnim : '')); navAnim = '';
-  segPlace(sb);
+  scrollTo({ top: same || navAnim === 'seg' ? y : 0, behavior: 'instant' });
+  if (same) flipPlay(before); else if (lastView && !reduced() && navAnim !== 'seg') replay($('#app'), 'enter' + (navAnim ? '-' + navAnim : ''));
+  if (ghost && !ghost.dataset.seg) { const dir = navAnim === 'fwd' ? 1 : -1, d = slideDist(appRect.width); ghostGo(ghost, dir, d); slideIn($('#app'), dir, d) }
+  navAnim = '';
+  segPlace(sb, ghost); segClicked = null;
+  if (ghost && ghost.dataset.seg && !ghost.getAnimations().length) ghost.remove();
   if (!same) for (const k in lastCounts) delete lastCounts[k];
   lastView = key; justOpened = null; countUp();
   const md = $('#modal');
@@ -928,6 +958,7 @@ document.addEventListener('click', e => {
   if (b.dataset.act === 'mpick') { pickMenu(+b.dataset.i); return }
   const a = b.dataset.act, v = id => $('#' + id)?.value?.trim() || '';
   const me = name || 'Someone';
+  segClicked = b.closest('.seg[data-seg]') ? b.closest('.seg[data-seg]').dataset.seg : null;
   if (a === 'tab') { flushDraft(); const o = TABS.findIndex(t => t[0] === tab), n = TABS.findIndex(t => t[0] === b.dataset.v); navAnim = n > o ? 'fwd' : n < o ? 'back' : ''; tab = b.dataset.v; ls('tab', tab); render(); scrollTo({ top: 0, behavior: 'instant' }) }
   else if (a === 'login') {
     const t = norm(v('w_team')), c = $('#codein').value.trim();

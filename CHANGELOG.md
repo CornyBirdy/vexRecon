@@ -37,6 +37,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
   The stats load the first time an event is opened and again once they are 6 hours old; **Refresh** loads them now.
 
 ### Changed
+- **A proper slide.** Changing tab or switching (Teams / Rankings / Skills / More, Our matches / All matches, To scout / All teams and so on) now carries the old content off to one side while the new content travels in the whole width from the other, over about half a second, so it feels like sliding over, not a short fade. Going the other way slides the other way.
 - **Alliance blocks read red and blue.** Your own alliance's block is a clear red or blue (it had a green cast), with the coloured top bar on both.
 - **Old wordmark back, green tint gone.** The italic RECON lettering is back next to the new viewfinder mark. The alliance blocks and your match cards no longer have a greenish tint: red alliance is red, blue is blue, and cards are neutral.
 - **Glassy controls.** Buttons, pills, round icon buttons, the chosen item in switches and tabs, and floating bars now look like frosted acrylic: a translucent sheen, a lit top edge and a soft blur over whatever is behind them, in both dark and light. The main action is a glassy accent button.
@@ -68,6 +69,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
   left out. The averages are shown as labelled tiles.
 
 ### Fixed
+- Switching between Teams, Rankings, Skills, More (and Our matches / All matches, To scout / All teams) no longer jumps back to the top of the page. It stays where you were. Changing the main tab still starts at the top.
 - The page's entrance animation no longer replays on every redraw (a new note or a sync used to make the team list's rows re-appear).
 - **Importing newer event codes.** Codes like `VE-V5-26-66510` (not just `RE-V5RC-26-5068`) are now accepted, and you
   can paste the whole event page link (even with `#general-info` on the end); the code is picked out of it. If there's
