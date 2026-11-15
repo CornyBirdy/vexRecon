@@ -37,6 +37,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
   The stats load the first time an event is opened and again once they are 6 hours old; **Refresh** loads them now.
 
 ### Changed
+- **Alliance blocks read red and blue.** Your own alliance's block is a clear red or blue (it had a green cast), with the coloured top bar on both.
 - **Old wordmark back, green tint gone.** The italic RECON lettering is back next to the new viewfinder mark. The alliance blocks and your match cards no longer have a greenish tint: red alliance is red, blue is blue, and cards are neutral.
 - **Glassy controls.** Buttons, pills, round icon buttons, the chosen item in switches and tabs, and floating bars now look like frosted acrylic: a translucent sheen, a lit top edge and a soft blur over whatever is behind them, in both dark and light. The main action is a glassy accent button.
 - **New logo and no outlines.** The Recon mark is now a bare turquoise viewfinder (corner brackets and a centre dot) next to a plain **Recon** wordmark in the app's own font, and the app icon, favicon and install icons match it. Outlines are gone from cards, chips, buttons and fields: shapes are told apart by soft fills instead (your own match cards and your alliance get a light tint). Keyboard focus rings stay.

@@ -277,9 +277,10 @@ button.p, .composer.has button { background: var(--accent-fill); }
 .chip.me { background: var(--a); color: var(--on-accent); } .chip.on { background: var(--a-soft); color: var(--accent-text); }
 .hchip, .res, .mtag { border-color: transparent; }
 .vs .side { background: color-mix(in oklab, var(--ink) 4%, var(--card)); }
-.vs .side.r { background: color-mix(in oklab, var(--alliance-red, var(--red)) 14%, var(--card)); } .vs .side.b { background: color-mix(in oklab, var(--alliance-blue, var(--blue)) 14%, var(--card)); }
-.vs .side.mine { border-color: transparent; box-shadow: none; }
-.vs .side.r.mine { background: color-mix(in oklab, var(--alliance-red, var(--red)) 26%, var(--card)); } .vs .side.b.mine { background: color-mix(in oklab, var(--alliance-blue, var(--blue)) 26%, var(--card)); }
+.vs .side.r { background: color-mix(in oklab, var(--alliance-red, var(--red)) 20%, var(--card)); } .vs .side.b { background: color-mix(in oklab, var(--alliance-blue, var(--blue)) 20%, var(--card)); }
+.vs .side.mine { border-color: transparent; }
+.vs .side.r.mine { box-shadow: inset 0 4px 0 var(--alliance-red); } .vs .side.b.mine { box-shadow: inset 0 4px 0 var(--alliance-blue); }
+.vs .side.r.mine { background: color-mix(in oklab, var(--alliance-red, var(--red)) 36%, var(--card)); } .vs .side.b.mine { background: color-mix(in oklab, var(--alliance-blue, var(--blue)) 36%, var(--card)); }
 
 /* ================= Glass controls ================= */
 button:where(:not(.link):not(.d):not(.p):not(.chip):not(.sel):not(.mi)), .ib, #theme, .segpill { background: var(--g-fill), var(--field); box-shadow: var(--g-edge), var(--g-drop); -webkit-backdrop-filter: blur(var(--blur-ctl)) saturate(1.5); backdrop-filter: blur(var(--blur-ctl)) saturate(1.5); }
