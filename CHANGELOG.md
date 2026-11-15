@@ -6,6 +6,13 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+### Fixed
+- **The bottom bar no longer wanders around the screen on iPhone while you scroll.** The page itself was set to clip sideways overflow, which iPhone Safari applies to the whole screen and which made the fixed tab bar drift. The clipping now happens on the app column only (the page-to-page slide looks the same), and the bar sits on its own layer pinned to the bottom. This was found from a screen recording and fixed without an iPhone to test on, so it needs checking on one.
+
+### Added
+- **Spectator mode.** On the sign-in screen there is a new **Spectator** tab: enter a team number (no team code) to follow that team's event. Spectators see matches (with times and fields), rankings, OPR / DPR / CCWM, skills and each team's season stats, view-only, with only the Event and Matches tabs. They never see scouting notes, scout names, the picklist or Team settings, can't change anything, and **Stop watching** (Event → More) takes them back to sign-in. The team has to be on Recon already. A team can switch spectators off in **Team settings → Spectators**.
+- **Match times and fields.** Every match shows when it's scheduled and which field it's on (like "Sat 9:30 am · Field 2") under its number in the match list, and on the Next match card. The time is the venue's own, taken from VEX Events. Existing events fill them in on the next automatic refresh.
+
 ### Changed
 - **The header no longer overlaps the logo on narrower or busier screens.** The logo keeps its space, and on screens under about 480 px wide the status pill shows just the time ("5:38 pm") instead of "Synced 5:38 pm". The time no longer has a leading zero.
 - Closing the filter panel no longer snaps back for a moment at the end, and the sign-in card no longer fades in at all (it just appears with the logo animating in), so it can't blink.

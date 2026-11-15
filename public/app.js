@@ -31,6 +31,20 @@ const tName = n => { const t = teams().find(t => t.number === n); return t ? t.n
 const side = (m, n) => { const us = m.red.includes(US) ? 'red' : m.blue.includes(US) ? 'blue' : null; if (!us) return ''; if (!n) return us; const mine = m[us]; return mine.includes(n) ? 'ally' : (m.red.includes(n) || m.blue.includes(n)) ? 'opp' : '' };
 const cls = (m, n) => { if (n === US) return ''; const s = side(m, n); return s === 'ally' ? 'gn' : s === 'opp' ? 'rd' : '' };
 const scored = m => m.rs != null && (m.rs || m.bs);
+// When and where a match is played: "Sat 9:30 am · Field 2". VEX Events gives the time with the venue's own UTC offset, so the clock
+// reading is taken straight from it (a spectator in another time zone sees the venue's time, which is the one that matters).
+function whenOf(m) {
+  const t = String(m.sched || m.ran || ''), p = t.match(/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/), e = evObj();
+  let at = '';
+  if (p) {
+    const d = new Date(Date.UTC(+p[1], +p[2] - 1, +p[3], +p[4], +p[5]));
+    at = d.toLocaleTimeString([], { timeZone: 'UTC', hour: 'numeric', minute: '2-digit' });
+    if (e && e.end && String(e.end).slice(0, 10) !== String(e.start || '').slice(0, 10)) at = d.toLocaleDateString([], { timeZone: 'UTC', weekday: 'short' }) + ' ' + at; // a multi-day event: say which day
+  }
+  const f = String(m.field || '').trim();
+  return [at, f ? (/^\d+$/.test(f) ? 'Field ' + f : f) : ''].filter(Boolean).join(' · ');
+}
+const whenRow = m => { const w = whenOf(m); return w ? `<div class="mwhen mut"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>${esc(w)}</div>` : '' };
 // Scouting entries: one per scout per team ("general"), plus optionally one per scout per match watched.
 const scoutBase = (t, who) => 's_' + ev + '_' + t + '_' + slug(who);
 const scoutId = (t, who, matchId) => scoutBase(t, who) + (matchId ? '_' + matchId : '');
@@ -111,9 +125,12 @@ const myScouts = t => { const b = scoutBase(t, name); return S.notes.filter(n =>
 // ---------- sync ----------
 const NOTE_MS = 10000, RE_MS = 15000; // how often to check for teammates' changes / VEX Events (milliseconds)
 const API = '/api';
+// Signed in as a team member (team code) or watching as a spectator (team number only, read-only).
+const signedIn = () => !!code || spec;
 class NetErr extends Error {}
 class AuthErr extends Error {}
-let code = ls('code'), team = ls('team'), teamInfo = lsJ('teamInfo') || {}, pollT, impT, lastV = -1, loginErr = false, online = true, lastSync = 0;
+let code = ls('code'), spec = ls('spec') === '1', team = ls('team'), teamInfo = lsJ('teamInfo') || {}, pollT, impT, lastV = -1, loginErr = false, online = true, lastSync = 0;
+let SPEC_ON = true; // whether spectators may watch this team (from the server)
 let RK = null, rkShown = ''; // whether the team has a recovery key (from the server); a key just made, shown until dismissed
 let outbox = lsJ('outbox') || [], inflight = null, flushing = false, polling = false, syncing = false, editSeq = 0;
 // Event codes look like RE-V5RC-26-5068 or VE-V5-26-66510. Pull one out of whatever was typed or pasted (a whole event page link is fine).
@@ -123,7 +140,7 @@ const skuOf = e => (e && e.sku) || parseSku(e && e.link);
 
 async function api(path, body) {
   let r;
-  try { r = await fetch(API + path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', 'x-team': team, 'x-code': code }, body: body ? JSON.stringify(body) : undefined }) }
+  try { r = await fetch(API + path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', 'x-team': team, 'x-code': code, ...(spec ? { 'x-spec': '1' } : {}) }, body: body ? JSON.stringify(body) : undefined }) }
   catch (e) { throw new NetErr('No connection') }
   if (r.status === 401 || r.status === 429) {
     const j = await r.json().catch(() => ({}));
@@ -162,7 +179,7 @@ function queue(o) {
 }
 
 const cacheState = () => lsJ('cache', { S, v: lastV, t: lastSync });
-function send(o, quiet) { editSeq++; applyOp(o); queue(o); cacheState(); setStatus(); flush(); if (!quiet) setTimeout(render, 0) }
+function send(o, quiet) { if (spec) return; editSeq++; applyOp(o); queue(o); cacheState(); setStatus(); flush(); if (!quiet) setTimeout(render, 0) }
 const put = (k, id, d) => send({ col: k, id, data: d, mode: 'set' });
 const upd = (k, id, d) => send({ col: k, id, data: d, mode: 'update' });
 const del = (k, id) => send({ col: k, id, mode: 'delete' });
@@ -187,7 +204,7 @@ async function pull() {
   try {
     const d = await api('/state');
     for (const k of COLS) S[k] = d[k] || [];
-    RK = !!d.rk;
+    RK = !!d.rk; SPEC_ON = d.spec !== false;
     for (const o of outbox) applyOp(o); // keep changes that haven't reached the server yet
     lastV = seq === editSeq ? d.v : -1; // something changed while downloading: fetch again next poll
     online = true; loaded = true; lastSync = Date.now();
@@ -197,7 +214,7 @@ async function pull() {
 }
 
 async function poll() {
-  if (polling || document.hidden || !code) return; polling = true;
+  if (polling || document.hidden || !signedIn()) return; polling = true;
   try {
     if (outbox.length) await flush();
     const d = await api('/version'); online = true;
@@ -209,7 +226,7 @@ function syncRE() {
   const s = skuOf(evObj()); if (!s || syncing || document.hidden || !online) return;
   syncing = true; api('/import', { sku: s, light: true }).catch(() => {}).finally(() => { syncing = false });
   // season stats are heavy (a few requests per team): load once, then again only when they're 6 hours old
-  if (evObj().reid && statsAge() > 6 * 3600e3 && Date.now() - statsFailAt > 5 * 60e3) refreshStats(false);
+  if (!spec && evObj().reid && statsAge() > 6 * 3600e3 && Date.now() - statsFailAt > 5 * 60e3) refreshStats(false);
 }
 // Season stats come in chunks of a few teams. Progress is written straight into the page (.stmsg) so it doesn't
 // fight with typing, and everyone else's phone only updates once the last chunk is in.
@@ -229,12 +246,12 @@ async function refreshStats(force) {
   } catch (err) { statsFailAt = Date.now(); statsMsg('Couldn’t load season stats: ' + String(err.message || err).slice(0, 120)) }
   finally { statsBusy = false; document.querySelectorAll('[data-act=refstats]').forEach(b => { b.disabled = false }) }
 }
-function schedule() { clearInterval(pollT); clearInterval(impT); if (code) { pollT = setInterval(poll, NOTE_MS); impT = setInterval(syncRE, RE_MS) } }
+function schedule() { clearInterval(pollT); clearInterval(impT); if (signedIn()) { pollT = setInterval(poll, NOTE_MS); impT = setInterval(syncRE, RE_MS) } }
 
 function setStatus() {
   const el = $('#sync'); if (!el) return;
   const n = outbox.length, unsaved = n + ' unsaved';
-  el.innerHTML = !code ? '' : !online ? (n ? 'Offline · ' + unsaved : 'Offline') : n ? 'Saving…' : lastSync ? '<span class="sl">Synced </span>' + new Date(lastSync).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '…';
+  el.innerHTML = !signedIn() ? '' : !online ? (n ? 'Offline · ' + unsaved : 'Offline') : n ? 'Saving…' : lastSync ? '<span class="sl">Synced </span>' + new Date(lastSync).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '…';
   el.className = !online ? 'off' : n ? 'busy' : '';
   el.title = !online ? 'No connection. Your changes are kept on this device and sent when you’re back online.' : '';
 }
@@ -258,12 +275,15 @@ function loginHTML() {
     <label class="chk"><input type="checkbox" id="w_saved"> I’ve saved the recovery key</label>` : ''}
     <div class="foot"><button data-act="wcopy">Copy code</button>${key ? '<button data-act="wcopykey">Copy key</button>' : ''}<button class="p" data-act="wdone" ${key ? 'disabled' : ''}>Start scouting</button></div></div>` + credit() + '</div>';
   }
-  h += segBar([['join', 'Join your team'], ['create', 'Set up a new team']], wmode, 'wmode');
+  h += segBar([['join', 'Join your team'], ['create', 'New team'], ['spectate', 'Spectator']], wmode, 'wmode');
   const err = loginErr ? `<p class="err">${esc(loginErr)}</p>` : '';
   if (wmode === 'join') h += `<div class="card login"><h2>Join your team</h2><p class="mut">Enter your team number and the team code a teammate gave you.</p>
     <input id="w_team" value="${esc(team)}" placeholder="Team number, e.g. 52111A" autocapitalize="characters" autocomplete="organization" aria-label="Team number">
     <div class="pw"><input id="codein" type="password" autocomplete="current-password" placeholder="Team code" aria-label="Team code"><button type="button" class="icon" data-act="peek" aria-label="Show code" aria-pressed="false">${EYE}</button></div>${err}<button class="p wide" data-act="login" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Opening…' : 'Open'}</button><div class="foot"><button class="link" data-act="wmode" data-v="recover">Lost the code?</button></div></div>`;
   else if (wmode === 'recover') h += recoverHTML(err);
+  else if (wmode === 'spectate') h += `<div class="card login"><h2>Watch a team</h2><p class="mut">Just following along? Enter a team number to see its event: matches with times and fields, rankings, OPR and skills. No team code needed. It’s view-only, and the team’s scouting notes and picklist stay private.</p>
+    <input id="w_spec" value="${esc(team)}" placeholder="Team number, e.g. 52111A" autocapitalize="characters" autocomplete="organization" aria-label="Team number">${err}
+    <button class="p wide" data-act="spectate" ${wbusy ? 'disabled' : ''}>${wbusy ? 'Opening…' : 'Watch'}</button><p class="mut fine">The team has to be on Recon already.</p></div>`;
   else {
     h += `<div class="card login"><h2>Set up a new team</h2><p class="mut">One person sets the team up, then shares the team code with everyone else.</p>
     <div class="row"><input id="w_new" value="${esc(wlook ? wlook.team.number : '')}" placeholder="Team number, e.g. 52111A" autocapitalize="characters" aria-label="Team number"><button data-act="wlookup" ${wbusy ? 'disabled' : ''}>Find team</button></div>${err}`;
@@ -294,9 +314,9 @@ async function init() {
   // phones signed in to the original single-team app (before Recon had teams) were all Invictus 52111A
   if (code && !team) { team = '52111A'; ls('team', team); ls('lastTeam', team) }
   const c = lsJ('cache');
-  if (code && c && c.S) { for (const k of COLS) S[k] = c.S[k] || []; for (const o of outbox) applyOp(o); lastSync = c.t || 0; loaded = true; if (!ev && S.events.length) ev = S.events[0].id }
+  if (signedIn() && c && c.S) { for (const k of COLS) S[k] = c.S[k] || []; for (const o of outbox) applyOp(o); lastSync = c.t || 0; loaded = true; if (!ev && S.events.length) ev = S.events[0].id }
   render(); setStatus();
-  if (code) { await flush(); await pull(); schedule(); syncRE() }
+  if (signedIn()) { await flush(); await pull(); schedule(); syncRE() }
 }
 
 // ---------- views ----------
@@ -310,6 +330,7 @@ const TABS = [
   ['scout', '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg>', 'Scout'],
   ['pick', '<svg viewBox="0 0 24 24"><path d="M7 4h10v4a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v4M8 21h8M10 17h4"/></svg>', 'Picklist']];
 
+const tabsFor = () => spec ? TABS.filter(t => t[0] === 'event' || t[0] === 'matches') : TABS; // a spectator has no scouting or picklist
 let dragging = false;
 // ---------- rendering + motion ----------
 // The whole view is re-rendered from state. To keep motion calm, animations only play on real changes:
@@ -369,7 +390,6 @@ function ghostMake(els, rect, clip) {
 }
 const slideDist = w => w + SLIDE_GAP; // the pages sit side by side with a small gap, so they never overlap
 function ghostGo(g, dir, d) {
-  const root = document.documentElement; root.style.overflowX = 'clip'; setTimeout(() => { root.style.overflowX = '' }, SLIDE_MS + 60);
   const a = g.firstChild.animate([{ transform: 'none' }, { transform: `translateX(${-dir * d}px)` }], { duration: SLIDE_MS, easing: SLIDE_EASE, fill: 'forwards' });
   a.onfinish = a.oncancel = () => g.remove();
 }
@@ -400,20 +420,21 @@ function segPlace(snap, ghost) {
 window.addEventListener('resize', () => segPlace());
 function render() {
   if (dragging) { dirty = true; return }
-  const out = !code || wbusy; // while a sign-in is being checked the code is already set, but we keep showing the welcome screen (drawing the app for a moment made the card blink)
+  const out = !signedIn() || wbusy; // while a sign-in is being checked the code is already set, but we keep showing the welcome screen (drawing the app for a moment made the card blink)
   document.body.classList.toggle('out', out);
   // the welcome entrance animation only plays the first time it appears, not on every re-render (it made the card blink out and fade back in)
   if (out) { $('#nav').innerHTML = ''; const sb = segSnap(), shown = !!$('#app .welcome'); $('#app').innerHTML = loginHTML(); $('#evname').textContent = 'Welcome'; $('#evbar').innerHTML = ''; if (sb.wmode || shown) $('#app .welcome')?.classList.add('swap'); segPlace(sb); lastView = ''; return }
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) || menuFor) { dirty = true; return }
   dirty = false;
   US = norm(team);
+  if (spec && tab !== 'event' && tab !== 'matches') tab = 'event';
   NAMES = Array.isArray(cfg().names) ? cfg().names : [];
-  if (loaded && name && !NAMES.includes(name)) { name = ''; ls('name', '') }
-  $('#evname').textContent = US + (teamInfo.name ? ' · ' + teamInfo.name : '');
+  if (!spec && loaded && name && !NAMES.includes(name)) { name = ''; ls('name', '') }
+  $('#evname').textContent = spec ? 'Watching ' + US : US + (teamInfo.name ? ' · ' + teamInfo.name : '');
   $('#evbar').innerHTML = evBar();
   // the tab bar is built once and only its classes change, so the selected tab can ease across
   const nav = $('#nav');
-  if (!nav.children.length) nav.innerHTML = TABS.map(t => `<button data-act="tab" data-v="${t[0]}">${t[1]}<span>${t[2]}</span></button>`).join('');
+  if (!nav.children.length) nav.innerHTML = tabsFor().map(t => `<button data-act="tab" data-v="${t[0]}">${t[1]}<span>${t[2]}</span></button>`).join('');
   nav.querySelectorAll('button').forEach(b => { const on = b.dataset.v === tab; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false') });
   let pill = nav.querySelector('.navpill'); if (!pill) { pill = document.createElement('i'); pill.className = 'navpill'; nav.prepend(pill) }
   const onb = nav.querySelector('button.on'); if (onb) { pill.style.width = onb.offsetWidth + 'px'; pill.style.transform = `translateX(${onb.offsetLeft}px)`; pill.style.opacity = 1 }
@@ -489,15 +510,15 @@ const IC_OUT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M2
 function evBar() {
   if (!S.events.length) return '';
   const e = evObj(), sku = skuOf(e);
-  return `<div class="evpick">${evSelect()}${sku ? `<button type="button" class="ib" data-act="reimport" aria-label="Update this event from VEX Events" title="Update from VEX Events">${IC_REFRESH}</button>` : ''}${e && e.link ? `<a class="ib" href="${esc(e.link)}" target="_blank" rel="noopener" aria-label="Open the event page" title="Event page">${IC_OUT}</a>` : ''}</div><p class="mut evmsg" id="impmsg2" role="status"></p>`;
+  return `<div class="evpick">${evSelect()}${sku ? `<button type="button" class="ib" data-act="reimport" aria-label="Update this event from VEX Events" title="${spec ? 'Check for new scores' : 'Update from VEX Events'}">${IC_REFRESH}</button>` : ''}${e && e.link ? `<a class="ib" href="${esc(e.link)}" target="_blank" rel="noopener" aria-label="Open the event page" title="Event page">${IC_OUT}</a>` : ''}</div><p class="mut evmsg" id="impmsg2" role="status"></p>`;
 }
-const evSelect = () => dd('evsel', ev, [['', '— choose event —'], ...S.events.map(x => [x.id, x.name]), ['+add', '＋ Add another event…']], { label: 'Event' });
+const evSelect = () => dd('evsel', ev, [['', '— choose event —'], ...S.events.map(x => [x.id, x.name]), ...(spec ? [] : [['+add', '＋ Add another event…']])], { label: 'Event' });
 // install: Android / desktop Chrome offer a prompt we can trigger; iPhone needs Share → Add to Home Screen
 let installEvt = null;
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (code) render() });
-window.addEventListener('appinstalled', () => { installEvt = null; toast('Recon is installed'); if (code) render() });
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (signedIn()) render() });
+window.addEventListener('appinstalled', () => { installEvt = null; toast('Recon is installed'); if (signedIn()) render() });
 const installRow = () => standalone() ? '' : installEvt ? `<h3>App</h3><button data-act="install">Install Recon on this device</button>`
   : isIOS ? `<h3>App</h3><p class="mut">To install: tap Share, then <b>Add to Home Screen</b>.</p>` : '';
 // The recovery key: kept by the coach, used from the sign-in screen when nobody has the team code. Shown once when made.
@@ -509,6 +530,7 @@ const settingsCard = () => `<details class="card" id="d-settings" ${det('d-setti
   <h3>Team code</h3><div class="row"><code id="codeval" class="codeval" data-shown="0">${'•'.repeat(Math.max(6, code.length))}</code><button data-act="showcode" aria-pressed="false">Show</button><button data-act="copycode">Copy</button></div>
   <p class="mut">Anyone with your team number and this code can see and edit your team’s scouting. <button class="link" data-act="rotate">Make a new code</button></p>
   <h3>Recovery key</h3>${rkHTML()}
+  <h3>Spectators</h3><p class="mut">${SPEC_ON ? 'Anyone who knows your team number can watch your event (matches, rankings, skills) in view-only Spectator mode. They never see your scouting notes, scout names or picklist.' : 'Spectator mode is off: nobody can watch your team without the team code.'}</p><div class="foot"><span class="grow"></span><button data-act="specset" data-v="${SPEC_ON ? 0 : 1}">${SPEC_ON ? 'Turn spectators off' : 'Allow spectators'}</button></div>
   <h3>Scouts</h3><div class="scouts">${NAMES.map(n => `<div class="srow"><span class="avatar">${esc((n[0] || '?').toUpperCase())}</span><span class="grow">${esc(n)}${n === name ? ' <span class="mut">(you)</span>' : ''}</span><button class="d" data-act="delname" data-v="${esc(n)}">Remove</button></div>`).join('') || '<p class="mut">Names show up here as people join.</p>'}</div>
   <div class="row"><input id="newscout" placeholder="Add a scout" autocomplete="off" aria-label="Add a scout"><button data-act="addscout">Add</button></div>
   ${installRow()}
@@ -516,6 +538,9 @@ const settingsCard = () => `<details class="card" id="d-settings" ${det('d-setti
 // What's new, in plain words (the full history is CHANGELOG.md). Newest first; add a line here when something users will notice changes.
 const CHANGES = [
   ['Latest', [
+    'Spectator mode: on the sign-in screen, choose Spectator and enter a team number (no code) to follow its matches, rankings, OPR and skills, view-only. Scouting notes and the picklist stay private, and a team can turn it off in Team settings.',
+    'Matches show their scheduled time and which field they’re on, in the match list and on the Next match card.',
+    'The bottom bar stays put on iPhone while you scroll.',
     'Matches has a new By team view: who a team plays with and against, and their record.',
     'Scouting is shared: the Scout list shows who scouted each team, and a Team activity list shows who did what and when.',
     'Dibs: tap Dibs on a team in the Scout list so two people don’t scout the same one. Teams go orange when partly scouted and green when fully scouted, and there’s a Scouted tab.',
@@ -534,7 +559,7 @@ function vAbout() {
   return `<div class="sheethead"><div class="grow"><h2>About Recon</h2></div><button data-act="close">Close</button></div>
   <div class="card about"><img class="heroicon" src="icon.svg" alt=""><div><b>Recon</b> <span class="mut">version ${APP.version}</span><p class="mut">Scouting for VEX V5 teams: match notes, scouting forms, rankings, OPR and a finals picklist, shared live with your team and working offline.</p></div></div>
   <div class="card"><h2>Made by Invictus 52111A</h2><div class="credit"><img class="on-light" src="logo.svg" alt="Invictus 52111A"><img class="on-dark" src="logo-light.svg" alt="Invictus 52111A"></div><p class="mut">Recon was designed and built by VEX team 52111A, Invictus.</p></div>
-  <div class="card"><h2>Your data</h2><p class="mut">Each team’s scouting is private to that team: only people with your team number and team code can see or change it. Event lists, matches and rankings come from VEX Events.</p></div>
+  <div class="card"><h2>Your data</h2><p class="mut">Each team’s scouting is private to that team: only people with your team number and team code can see or change it. Event lists, matches and rankings come from VEX Events, and anyone can watch them for your team in view-only Spectator mode (your team can turn that off).</p></div>
   <p class="mut fine">© 2026 Invictus 52111A. All rights reserved. Recon is not affiliated with or endorsed by VEX Robotics or the REC Foundation.</p>`;
 }
 
@@ -551,7 +576,7 @@ function evStatus(e, started, hasNext, played) {
   if (ds != null && ds > 0) return { cls: 'soon', html: `Starts ${ds === 1 ? 'tomorrow' : 'in ' + ds + ' days'} · ${at(e.start).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}` };
   if (ds != null && de >= 0) return { cls: 'now', html: `<span class="livedot"></span>Live now${de > ds ? ` · Day ${1 - ds} of ${de - ds + 1}` : ''}` };
   if (ds != null) return { cls: 'done', html: `Ended ${de === 0 ? 'today' : -de + (de === -1 ? ' day' : ' days') + ' ago'}` };
-  return started && hasNext ? { cls: 'now', html: '<span class="livedot"></span>Event in progress' } : { cls: 'soon', html: played ? 'All our matches are played' : hasNext ? 'Matches are scheduled' : 'Waiting for the match schedule' };
+  return started && hasNext ? { cls: 'now', html: '<span class="livedot"></span>Event in progress' } : { cls: 'soon', html: played ? (spec ? 'All of ' + US + '’s matches are played' : 'All our matches are played') : hasNext ? 'Matches are scheduled' : 'Waiting for the match schedule' };
 }
 // Stat cards in the instrument-panel style: icon + label, a big light number with a muted denominator, a delta chip, and a dot-matrix chart.
 const IC_RANK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v4a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v4M8 21h8M10 17h4"/></svg>';
@@ -569,18 +594,18 @@ function rankStat(st, me, ts) {
     viz = dotMatrix(top.map(([n, r]) => ({ h: Math.max(1, Math.round(Math.max(0, r.opr) / max * 7)), cls: n === US ? 'me' : '' })), 7, `OPR of the top ${top.length} teams, ours highlighted`);
   }
   const ranked = me && me.rank != null;
-  return stat({ icon: IC_RANK, label: 'Our rank' + (st.official ? '' : ' (calculated)'), attrs: 'data-act="gorank"',
+  return stat({ icon: IC_RANK, label: (spec ? US + ' rank' : 'Our rank') + (st.official ? '' : ' (calculated)'), attrs: 'data-act="gorank"',
     big: ranked ? `<span data-count="${me.rank}" data-ck="rank">${me.rank}</span>` : '–', den: ranked ? ts.length : '',
     chip: me && me.ccwm != null ? delta('CCWM ' + sgn(me.ccwm), me.ccwm >= 0) : '',
-    cap: me && (me.w + me.l + me.t) ? `Record ${rec(me)}${me.opr != null ? ' · OPR ' + f1(me.opr) : ''}` : 'Your ranking shows up once qualification matches are scored.', viz });
+    cap: me && (me.w + me.l + me.t) ? `Record ${rec(me)}${me.opr != null ? ' · OPR ' + f1(me.opr) : ''}` : (spec ? 'The ranking' : 'Your ranking') + ' shows up once qualification matches are scored.', viz });
 }
 function recStat(ours) {
   const done = ours.filter(scored), sc = m => { const s = side(m); return s === 'red' ? [m.rs, m.bs] : [m.bs, m.rs] };
   const w = done.filter(m => { const [a, b] = sc(m); return a > b }).length;
   const cols = done.slice(-12).map(m => { const [a, b] = sc(m); return { a, cls: a > b ? 'w' : a < b ? 'l' : 't' } }), max = Math.max(...cols.map(c => c.a), 1);
-  return stat({ icon: IC_REC, label: 'Our matches', attrs: 'data-act="tab" data-v="matches"',
+  return stat({ icon: IC_REC, label: spec ? US + ' matches' : 'Our matches', attrs: 'data-act="tab" data-v="matches"',
     big: done.length ? `<span data-count="${w}" data-ck="w">${w}</span>` : '–', den: done.length || '',
-    chip: done.length ? delta(Math.round(w / done.length * 100) + '% won', w * 2 >= done.length) : '', cap: done.length ? 'matches won so far' : 'Your matches show up once scoring starts',
+    chip: done.length ? delta(Math.round(w / done.length * 100) + '% won', w * 2 >= done.length) : '', cap: done.length ? 'matches won so far' : (spec ? 'Matches show up' : 'Your matches show up') + ' once scoring starts',
     viz: cols.length ? dotMatrix(cols.map(c => ({ h: Math.max(1, Math.round(c.a / max * 7)), cls: c.cls })), 7, 'Our score in each match: green for a win, red for a loss, amber for a tie') : '' });
 }
 // Home: a status line, our rank as the big number and the next match we play (the tab bar does the navigating).
@@ -593,18 +618,19 @@ function vHome() {
   if (next) {
     const s = side(next), sides = [['r', 'Red alliance', next.red, 'red'], ['b', 'Blue alliance', next.blue, 'blue']]; if (s === 'blue') sides.reverse();
     nx = `<div class="card next tap" data-act="gomatch" data-id="${esc(next.id)}" role="button" tabindex="0" aria-label="Open ${esc(next.label)}"><div class="nhead"><h2>Next match</h2><span class="chip warn">${esc(next.label)} · ${away <= 0 ? 'up next' : 'in ' + away + (away === 1 ? ' match' : ' matches')}</span></div>
-    <div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${s === col ? 'mine' : ''}"><span>${l}</span>${chips(next, arr)}</div>`).join('')}</div></div>`;
+    ${whenRow(next)}<div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${s === col ? 'mine' : ''}"><span>${l}</span>${chips(next, arr)}</div>`).join('')}</div></div>`;
   }
-  return `<div class="home"><div class="greet"><div><p class="live ${stat.cls}">${stat.html}</p><h1>${esc(name || US)}${name ? ' <button class="link namechg" data-act="setname" data-v="">Change</button>' : ''}</h1></div></div>
+  return `<div class="home"><div class="greet"><div><p class="live ${stat.cls}">${stat.html}</p><h1>${spec ? esc(teamInfo.name || US) : esc(name || US)}${!spec && name ? ' <button class="link namechg" data-act="setname" data-v="">Change</button>' : ''}</h1></div></div>
   <section class="panel"><div class="phead"><h2>Event overview</h2></div>${rankStat(st, me, ts)}${recStat(ours)}</section>
   ${nx}</div>`;
 }
 
 function vEvent() {
   const e = evObj();
-  let h = name ? '' : whoCard('Who are you?', 'Your name goes on your notes and scouting.');
+  let h = name || spec ? '' : whoCard('Who are you?', 'Your name goes on your notes and scouting.');
   if (e) h += vHome();
   const me = name ? `<p class="mut meta">Scouting as <b>${esc(name)}</b> · <button class="link" data-act="setname" data-v="">Change</button></p>` : '';
+  if (!e && spec) return h + `<div class="card"><h2>No event yet</h2><p class="mut">Team ${esc(US)} hasn’t added an event to Recon yet. It shows up here as soon as they do.</p></div>` + vWatch();
   if (!e) return h + `<div class="card"><h2>Pick your event</h2>${me}${S.events.length ? '<p class="mut">Choose one of your events from the bar at the top, or add another here.</p>' : ''}<h3>Find your event</h3><p class="mut">Pulls in the teams, matches and rankings, and keeps them up to date.</p>${ebHTML()}<h3>Or paste an event code or link</h3>${importForm('')}<h3>Or create one by hand</h3>${manualForm()}</div>` + settingsCard();
   h += segBar([['list', 'Teams'], ['rank', 'Rankings'], ['skills', 'Skills'], ['more', 'More']], tv, 'tview');
   return h + ({ list: vTeamList, rank: vRank, skills: vSkills, more: vMore })[tv]();
@@ -613,8 +639,11 @@ const importForm = sku => `<div class="row"><input id="sku" value="${esc(sku)}" 
 const manualForm = () => `<div class="row"><input id="newev" placeholder="Event name" aria-label="Event name"><button data-act="addev">Create</button></div>`;
 
 // More: everything that isn't a table – alliance requests, event notes, other events, settings.
+const vWatch = () => `<div class="card"><h2>Spectator mode</h2><p class="mut meta">You’re watching <b>${esc(US)}</b> ${esc(teamInfo.name || '')}. It’s view-only: matches, rankings, OPR and skills from VEX Events. The team’s scouting notes and picklist aren’t shared.</p>${installRow()}<div class="foot"><span class="grow"></span><button data-act="unwatch">Stop watching</button></div></div>
+  <p class="mut fine quiet"><button class="link" data-act="about">About Recon</button> · <button class="link" data-act="changes">What’s new</button></p>`;
 function vMore() {
   const e = evObj(), sku = skuOf(e);
+  if (spec) return vWatch();
   return `<div class="card"><h2>Event notes</h2>${noteBox('event', '', '', 'Anything about this event…')}</div>
   <details class="card" id="d-more" ${det('d-more', false)}><summary><h2>Add another event</h2></summary><h3>Find an event</h3>${ebHTML()}<h3>Or paste an event code or link</h3>${importForm('')}<h3>Or create one by hand</h3>${manualForm()}</details>
   ${sku ? '' : `<details class="card" id="d-link" ${det('d-link', false)}><summary><h2>Event link</h2></summary><input id="evlink" value="${esc(e.link || '')}" placeholder="Paste the VEX event link here" aria-label="Event link"></details>`}
@@ -632,7 +661,7 @@ function vTeamList() {
     const r = st.by.get(t.number), k = skillOf(t.number, 'season');
     const bits = [r && r.rank != null ? 'Rank ' + r.rank : '', k && k.c != null ? 'Skills ' + fmt(k.c) + ' (D ' + fmt(k.d) + ' · A ' + fmt(k.p) + ')' : '', r && r.opr != null ? 'OPR ' + f1(r.opr) : ''].filter(Boolean);
     return `<div class="trow ${t.number === US ? 'us' : ''}" data-act="team" data-t="${t.number}" data-q="${esc(hay)}" ${q && !hay.includes(q) ? 'style="display:none"' : ''}><span class="num">${t.number}</span><div class="grow"><div>${esc(t.name)}</div><div class="mut">${esc(t.school)}${n ? ' · ' + n + (n === 1 ? ' note' : ' notes') : ''}</div>${bits.length ? `<div class="mut tstat">${bits.join(' · ')}</div>` : ''}</div>${r && (r.opr != null || r.rank != null) ? `<span class="rv"><i class="rdot ${r.rank == null ? '' : r.rank / ts.length <= .34 ? 'g' : r.rank / ts.length <= .67 ? 'y' : 'r'}"></i>${r.opr != null ? f1(r.opr) : '#' + r.rank}</span>` : '<span class="chev" aria-hidden="true">›</span>'}</div>` }).join('') || empty('No teams yet.')}</div>
-  <details class="card" id="d-addteam" ${det('d-addteam', !ts.length)}><summary><h2>Add a team manually</h2></summary><div class="row"><input id="t_n" placeholder="Number e.g. 52111A" aria-label="Team number"><input id="t_name" placeholder="Team name" aria-label="Team name"><input id="t_s" placeholder="School" aria-label="School"><button class="p" data-act="addteam">Add</button></div></details>`;
+  ${spec ? '' : `<details class="card" id="d-addteam" ${det('d-addteam', !ts.length)}><summary><h2>Add a team manually</h2></summary><div class="row"><input id="t_n" placeholder="Number e.g. 52111A" aria-label="Team number"><input id="t_name" placeholder="Team name" aria-label="Team name"><input id="t_s" placeholder="School" aria-label="School"><button class="p" data-act="addteam">Add</button></div></details>`}`;
 }
 
 function vRank() {
@@ -652,9 +681,9 @@ function vRank() {
 function vSkills() {
   const e = evObj(), d = stDoc();
   const upd = e.reid ? `<span class="stmsg mut">${statsBusy ? 'Loading season stats…' : ''}</span>` : '';
-  const refresh = e.reid ? `<button data-act="refstats" ${statsBusy ? 'disabled' : ''}>${d ? 'Refresh' : 'Load season stats'}</button>` : '';
+  const refresh = e.reid && !spec ? `<button data-act="refstats" ${statsBusy ? 'disabled' : ''}>${d ? 'Refresh' : 'Load season stats'}</button>` : '';
   if (!e.reid) return '<div class="card"><h2>Skills</h2><p class="mut">Skills scores and season records come from VEX Events, so they need an event imported with its event code (Event tab → More → Import).</p></div>';
-  if (!d) return `<div class="card"><h2>Skills</h2><p class="mut">Season stats (skills scores, season record, awards) aren’t loaded yet. They cover each team’s whole season, not only this event, so they work even when no matches are being played. This takes about a minute.</p><div class="foot">${upd}<span class="grow"></span>${refresh}</div></div>`;
+  if (!d) return `<div class="card"><h2>Skills</h2><p class="mut">Season stats (skills scores, season record, awards) aren’t loaded yet. They cover each team’s whole season, not only this event, so they work even when no matches are being played. ${spec ? 'A teammate’s Recon loads them.' : 'This takes about a minute.'}</p><div class="foot">${upd}<span class="grow"></span>${refresh}</div></div>`;
   const rows = skillRows(sks, sko), got = rows.filter(r => r.c != null);
   const best = f => got.filter(r => has(r[f])).sort((a, b) => b[f] - a[f])[0];
   const mean = f => { const v = got.map(r => r[f]).filter(has); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null };
@@ -760,7 +789,7 @@ async function ebLoad(force) {
   EB.busy = false; ebPaint();
 }
 // load the first time the browser is actually on screen (not while its folded section is closed)
-function ebKick() { const el = $('#eb'); if (el && !el.closest('details:not([open])') && EB.list === null && !EB.busy && code) ebLoad() }
+function ebKick() { const el = $('#eb'); if (el && !el.closest('details:not([open])') && EB.list === null && !EB.busy && code && !spec) ebLoad() }
 function filt(q) { q = q.toLowerCase(); document.querySelectorAll('#tl2 .trow').forEach(c => c.style.display = c.dataset.q.includes(q) ? '' : 'none') }
 
 const chips = (m, arr) => arr.map(n => `<button class="chip ${n === US ? 'me' : cls(m, n)}" data-act="team" data-t="${n}">${n}</button>`).join('');
@@ -770,7 +799,7 @@ function vMatches() {
   const st = stats(), me = st.by.get(US), playedN = all.filter(m => side(m) && scored(m)).length;
   const rankChip = me && me.rank != null ? `<span class="hchip">Rank ${me.rank} of ${teams().length}</span>` : '';
   let h = `<section class="panel">${recStat(all.filter(m => side(m)))}</section>` +
-    segBar([['ours', 'Our matches'], ['all', 'All matches'], ['team', 'By team']], mf, 'mfilter');
+    segBar([['ours', spec ? US : 'Our matches'], ['all', 'All matches'], ['team', 'By team']], mf, 'mfilter');
   let tw = 0, tl = 0, tt = 0;
   if (mf === 'team') {
     h += `<div class="card mteam">${dd('mft', mfT, [['', 'Pick a team…'], ...teams().map(t => [t.number, t.number + ' · ' + t.name])], { value: mfT, label: 'Team to show matches for' })}</div>`;
@@ -778,16 +807,17 @@ function vMatches() {
     if (mfT) h += `<p class="mut meta">${list.length} ${list.length === 1 ? 'match' : 'matches'} for <b>${esc(mfT)}</b>${tw + tl + tt ? ` · ${tw}W ${tl}L${tt ? ' ' + tt + 'T' : ''} so far` : ''}</p>`;
   }
   h += list.map(m => {
-    const s = side(m), o = open[m.id], ps = mf === 'team' ? (m.red.includes(mfT) ? 'red' : 'blue') : s, ours = mf !== 'all' && !!ps; // Our matches: our alliance is always the left column, and the score reads us–them
+    const s = side(m), o = !spec && open[m.id], ps = mf === 'team' ? (m.red.includes(mfT) ? 'red' : 'blue') : s, ours = mf !== 'all' && !!ps; // Our matches: our alliance is always the left column, and the score reads us–them
     const sides = [['r', 'Red alliance', m.red, 'red'], ['b', 'Blue alliance', m.blue, 'blue']]; if (ours && ps === 'blue') sides.reverse();
     let res = '';
     const rel = mf === 'team' ? `<div class="mrel mut"><b>${esc(mfT)}</b> with ${m[ps].filter(x => x !== mfT).map(esc).join(', ') || '–'} <span aria-hidden="true">·</span> against ${m[ps === 'red' ? 'blue' : 'red'].map(esc).join(', ')}</div>` : '';
     if (ps && scored(m)) { const a = ps === 'red' ? m.rs : m.bs, b = ps === 'red' ? m.bs : m.rs; res = a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }
-    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" data-act="mopen" data-id="${m.id}" role="button" aria-expanded="${!!o}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${ours && ps === 'blue' ? m.bs + '–' + m.rs : m.rs + '–' + m.bs}</span>` : ''}${res}<span class="grow"></span><span class="chev ${o ? 'up' : ''}" aria-hidden="true">›</span></div>
-    ${rel}<div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${!ours && s === col ? 'mine' : ''}"><span>${l}</span>${chips(m, arr)}</div>`).join('')}</div>
+    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" ${spec ? '' : 'data-act="mopen" role="button" aria-expanded="' + !!o + '"'} data-id="${m.id}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${ours && ps === 'blue' ? m.bs + '–' + m.rs : m.rs + '–' + m.bs}</span>` : ''}${res}<span class="grow"></span>${spec ? '' : `<span class="chev ${o ? 'up' : ''}" aria-hidden="true">›</span>`}</div>
+    ${whenRow(m)}${rel}<div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${!ours && s === col ? 'mine' : ''}"><span>${l}</span>${chips(m, arr)}</div>`).join('')}</div>
     ${o ? `<div class="mx ${justOpened === m.id ? 'reveal' : ''}">` + (s ? `<h3>Strategy</h3>${noteBox('match', m.id, 'strat', 'Our strategy for this match…')}<h3>Our alliance</h3>${noteBox('match', m.id, 'ally', 'What our partner said / their plan…')}<h3>Opposition</h3>${noteBox('match', m.id, 'opp', 'Weaknesses, tendencies…')}`
         : `<h3>Notes</h3>${noteBox('match', m.id, 'gen', 'What happened in this match…')}`) + `<div class="foot"><button class="d" data-act="clearmatch" data-id="${m.id}">Clear all notes for this match</button><button class="d" data-act="delmatch" data-id="${m.id}">Delete match</button></div></div>` : ''}</div>`
-  }).join('') || empty(mf === 'all' ? 'No matches yet.' : mf === 'team' ? (mfT ? 'No matches for ' + mfT + ' yet.' : 'Pick a team to see who they play with and against.') : 'No matches with us yet.');
+  }).join('') || empty(mf === 'all' ? 'No matches yet.' : mf === 'team' ? (mfT ? 'No matches for ' + mfT + ' yet.' : 'Pick a team to see who they play with and against.') : (spec ? 'No matches for ' + US + ' yet.' : 'No matches with us yet.'));
+  if (spec) return h;
   h += `<details class="card" id="d-addmatch" ${det('d-addmatch', !all.length)}><summary><h2>Add a match manually</h2></summary><div class="row"><input id="m_l" placeholder="Label e.g. Q12"><input id="m_o" type="number" inputmode="numeric" placeholder="Match number (for sorting)"></div>
   <h3>Red alliance</h3><div class="row"><input id="m_r1" data-combo="teams" autocomplete="off" placeholder="Team"><input id="m_r2" data-combo="teams" autocomplete="off" placeholder="Team"></div>
   <h3>Blue alliance</h3><div class="row"><input id="m_b1" data-combo="teams" autocomplete="off" placeholder="Team"><input id="m_b2" data-combo="teams" autocomplete="off" placeholder="Team"></div>
@@ -899,7 +929,7 @@ const sum = n => {
 function seasonCard(num) {
   const e = evObj(), d = stDoc(), s = d && d.teams && d.teams[num];
   if (!e || !e.reid) return `<div class="card"><h2>Season stats</h2><p class="mut">Skills scores, season record and awards come from VEX Events, so they need an event imported with its event code.</p></div>`;
-  if (!d) return `<div class="card"><h2>Season stats</h2><p class="mut">Not loaded yet. Open Event → Skills and tap <b>Load season stats</b>.</p></div>`;
+  if (!d) return `<div class="card"><h2>Season stats</h2><p class="mut">${spec ? 'Not loaded yet.' : 'Not loaded yet. Open Event → Skills and tap <b>Load season stats</b>.'}</p></div>`;
   if (!s || s.err) return `<div class="card"><h2>Season stats</h2><p class="mut">${s ? 'VEX Events didn’t give us this team’s season. Try Refresh on the Skills page.' : 'No season data for this team (added by hand, or new this event).'}</p></div>`;
   const all = skillRows('season', 'c'), idx = all.findIndex(r => r.team === num), c = sumOf(s.d, s.p), got = all.filter(r => r.c != null).length;
   const hist = (s.ev || []).slice().reverse(), sh = (s.sh || []).slice().reverse();
@@ -916,6 +946,12 @@ function seasonCard(num) {
 
 function vTeam(num) {
   const head = (title, sub, act) => `<div class="sheethead"><div class="grow"><h2>${title}</h2>${sub ? `<div class="mut">${sub}</div>` : ''}</div>${act || ''}<button data-act="close">Close</button></div>`;
+  if (spec) { // spectators get the public side only: rank, season stats and matches. No scouting, notes or picklist.
+    const t = teams().find(x => x.number === num) || { number: num, name: '', school: '' }, st = stats(), r = st.by.get(num), ms = matches().filter(m => m.red.includes(num) || m.blue.includes(num));
+    return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) +
+      (r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '') + seasonCard(num) +
+      `<div class="card"><h2>Matches</h2>${ms.map(m => `<span class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}">${esc(m.label)}</span>`).join('') || '<span class="mut">None</span>'}</div>`;
+  }
   if (num === US) return head(`<span class="num">${esc(num)}</span> ${esc(tName(num) || 'Us')}`) + `<div class="card">That’s us. Scouting and team notes are turned off for our own team.</div>` + seasonCard(num);
   const t = teams().find(x => x.number === num) || { number: num, name: '', school: '' };
   const ms = matches().filter(m => m.red.includes(num) || m.blue.includes(num));
@@ -1063,10 +1099,18 @@ document.addEventListener('click', e => {
   else if (a === 'login') {
     const t = norm(v('w_team')), c = $('#codein').value.trim();
     if (!t || !c) { loginErr = 'Enter your team number and team code.'; render(); return }
-    const prevTeam = team, prevCode = code; team = t; code = c; loginErr = false; wbusy = true; render();
-    api('/login', {}).then(d => { wbusy = false; useTeam(t, d.team); ls('code', c); online = true; render(); return flush().then(pull) }).then(schedule)
+    const prevTeam = team, prevCode = code; team = t; code = c; spec = false; loginErr = false; wbusy = true; render();
+    api('/login', {}).then(d => { wbusy = false; useTeam(t, d.team); ls('code', c); ls('spec', ''); online = true; render(); return flush().then(pull) }).then(schedule)
       .catch(e => { wbusy = false; code = ''; team = prevTeam; if (e instanceof NetErr) loginErr = 'Can’t reach Recon. Check your connection.'; else if (!(e instanceof AuthErr)) loginErr = e.message; render() });
   }
+  else if (a === 'spectate') {
+    const t = norm(v('w_spec')); if (!t) { loginErr = 'Enter the team number you want to watch.'; render(); return }
+    const prevTeam = team; team = t; spec = true; code = ''; loginErr = false; wbusy = true; render();
+    api('/login', {}).then(d => { wbusy = false; useTeam(t, d.team); ls('spec', '1'); ls('code', ''); online = true; render(); return pull() }).then(schedule)
+      .catch(e => { wbusy = false; spec = false; team = prevTeam; loginErr = e instanceof NetErr ? 'Can’t reach Recon. Check your connection.' : e.message; render() });
+  }
+  else if (a === 'unwatch') { spec = false; ls('spec', ''); lsJ('cache', null); for (const k of COLS) S[k] = []; ev = ''; ls('ev', ''); lastV = -1; loaded = false; EB.list = null; mTeam = null; wmode = 'spectate'; schedule(); render(); setStatus() }
+  else if (a === 'specset') { const on = b.dataset.v === '1'; SPEC_ON = on; render(); api('/spectators', { on }).then(() => toast(on ? 'Spectators can watch your team again' : 'Spectator mode is off for your team')).catch(e => { SPEC_ON = !on; render(); toast('Couldn’t change that: ' + e.message) }) }
   else if (a === 'wmode') { wmode = b.dataset.v; ls('wmode', wmode); loginErr = false; render() }
   else if (a === 'wlookup') {
     const t = norm(v('w_new')); if (!t) return; wbusy = true; loginErr = false; render();
@@ -1092,7 +1136,7 @@ document.addEventListener('click', e => {
   else if (a === 'copycode') copyText(code).then(() => toast('Team code copied'), () => toast('Couldn’t copy – tap Show and copy it by hand'));
   else if (a === 'logout') {
     const n = outbox.length, unsent = n ? n + (n === 1 ? ' change hasn’t' : ' changes haven’t') + ' been sent yet and will be lost. ' : '';
-    ask('Log out of this device?', unsent + 'To get back in you need the team number and the team code (' + code + '). Make sure you have the code saved before you log out.', 'Log out').then(ok => { if (!ok) return; code = ''; ls('code', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; rkShown = ''; RK = null; EB.list = null; schedule(); render(); setStatus() })
+    ask('Log out of this device?', unsent + 'To get back in you need the team number and the team code (' + code + '). Make sure you have the code saved before you log out.', 'Log out').then(ok => { if (!ok) return; code = ''; ls('code', ''); spec = false; ls('spec', ''); outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; lastV = -1; loaded = false; rkShown = ''; RK = null; EB.list = null; schedule(); render(); setStatus() })
   }
   else if (a === 'ebscope') { EB.scope = b.dataset.v; ls('ebs', EB.scope); EB.msg = ''; EB.f.when = ''; clearTimeout(ebT); ebLoad(); render() }
   else if (a === 'ebfopen') {
@@ -1118,7 +1162,7 @@ document.addEventListener('click', e => {
   else if (a === 'rkdone') { rkShown = ''; render() }
   else if (a === 'wcopykey') copyText(wcreated.recoveryKey).then(() => toast('Recovery key copied'), () => toast('Couldn’t copy – write it down'));
   else if (a === 'import') doImport(v('sku'), sayIn('impmsg'));
-  else if (a === 'reimport') doImport(skuOf(evObj()), sayIn('impmsg2'));
+  else if (a === 'reimport') { if (spec) { const s = skuOf(evObj()), say = sayIn('impmsg2'); say('Checking…'); api('/import', { sku: s, light: true }).then(() => pull()).then(() => say('')).catch(e => say('Couldn’t check: ' + String(e.message || e).slice(0, 100))) } else doImport(skuOf(evObj()), sayIn('impmsg2')) }
   else if (a === 'team') { mTeam = b.dataset.t; render() }
   else if (a === 'close') closeModal();
   else if (a === 'addev') { const n = v('newev'); if (n) { const id = uid(); put('events', id, { name: n, link: '', picks: [] }); ev = id; ls('ev', id) } }
@@ -1142,7 +1186,7 @@ document.addEventListener('click', e => {
   else if (a === 'sfilter') { sf = b.dataset.v; ls('sf', sf); navAnim = 'seg'; render() }
   else if (a === 'mfilter') { mf = b.dataset.v; ls('mf', mf); navAnim = 'seg'; render() }
   else if (a === 'gorank') { tab = 'event'; ls('tab', tab); tv = 'rank'; ls('tv', tv); navAnim = 'fwd'; render(); const r = document.querySelector('#app tr.us'); if (r) setTimeout(() => { r.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); flash(r) }, 120) }
-  else if (a === 'gomatch') { const id = b.dataset.id; tab = 'matches'; ls('tab', tab); mf = 'ours'; ls('mf', mf); open[id] = true; justOpened = id; navAnim = 'fwd'; render(); const c = document.querySelector(`#app [data-act="mopen"][data-id="${id}"]`); if (c) setTimeout(() => { c.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); flash(c.closest('.card')) }, 120) }
+  else if (a === 'gomatch') { const id = b.dataset.id; tab = 'matches'; ls('tab', tab); mf = 'ours'; ls('mf', mf); open[id] = true; justOpened = id; navAnim = 'fwd'; render(); const c = document.querySelector(`#app .mhead[data-id="${id}"]`); if (c) setTimeout(() => { c.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); flash(c.closest('.card')) }, 120) }
   else if (a === 'tview') { tv = b.dataset.v; ls('tv', tv); navAnim = 'seg'; render() }
   else if (a === 'rksort') { rks = b.dataset.v; ls('rks', rks); render() }
   else if (a === 'sksope') { sks = b.dataset.v; ls('sks', sks); render() }
@@ -1225,11 +1269,11 @@ document.addEventListener('pointerdown', e => {
 document.addEventListener('keydown', e => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.tap[role=button]')) { e.preventDefault(); e.target.click(); return }
   if (e.key !== 'Enter') return;
-  const go = { codein: 'login', w_team: 'login', w_new: 'wlookup', w_rc: 'rcgo', w_rk: 'rcgo', myname: 'addname', newscout: 'addscout' }[e.target.id];
+  const go = { codein: 'login', w_team: 'login', w_spec: 'spectate', w_new: 'wlookup', w_rc: 'rcgo', w_rk: 'rcgo', myname: 'addname', newscout: 'addscout' }[e.target.id];
   if (go) { e.preventDefault(); document.querySelector(`[data-act=${go}]`)?.click() }
 });
-document.addEventListener('visibilitychange', () => { if (document.hidden) flushDraft(); else if (code) { flush(); pull() } });
-window.addEventListener('online', () => { if (code) { online = true; flush().then(pull) } });
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushDraft(); else if (signedIn()) { flush(); pull() } });
+window.addEventListener('online', () => { if (signedIn()) { online = true; flush().then(pull) } });
 window.addEventListener('offline', () => { online = false; setStatus() });
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('/sw.js').catch(() => {});
 applyTheme(); init();

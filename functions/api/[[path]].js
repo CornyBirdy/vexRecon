@@ -99,6 +99,7 @@ async function matchDocs(x, eid, reid, divs) {
       docs.push([`matches/${eid}_${d}_${r}_${m.instance}_${n}`, {
         eventId: eid, label, round: r, order: (BASE[r] ?? 9000) + (m.instance || 0) * 100 + n,
         red: tm(al("red")), blue: tm(al("blue")),
+        field: m.field ? String(m.field) : "", sched: m.scheduled || null, ran: m.started || null, // field name, scheduled time, time it actually started (as VEX Events gives them, with the venue's UTC offset)
         rs: m.scored && al("red") ? al("red").score : null, bs: m.scored && al("blue") ? al("blue").score : null,
       }]);
     }
@@ -190,6 +191,20 @@ async function auth(req, env, db) {
   }
   if (fails.n) await reg.delete("_fail_" + number);
   return { rec, reg, store: new Store(db, rec.store) };
+}
+
+// Spectators: a team number and no code. They get a read-only view of what already comes from VEX Events (events, teams,
+// matches, rankings, season stats), never the scouting notes, scout names or picklist, and can't change anything.
+// A team can turn this off in Team settings.
+async function watchAuth(req, env, db) {
+  const number = tid(req.headers.get("x-team"));
+  if (!TEAM_NUM.test(number)) return json({ error: "That doesn't look like a VEX team number (e.g. 52111A)" }, 400);
+  const reg = new Store(db, "", "_registry");
+  let rec = await reg.get(number);
+  if (!rec && number === LEGACY_TEAM(env) && env.TEAM_CODE) rec = { number, name: env.LEGACY_TEAM_NAME || "Invictus", org: "", store: "scout" }; // not signed in to yet, but its data is there
+  if (!rec) return json({ error: "Team " + number + " isn’t on Recon yet. Spectator mode shows a team that already uses Recon, so a teammate needs to set it up first." }, 404);
+  if (rec.nospec) return json({ error: "Team " + number + " has turned spectator mode off." }, 403);
+  return { rec, reg, store: new Store(db, rec.store), spec: true };
 }
 
 // ---------- recovery key ----------
@@ -364,13 +379,22 @@ export async function onRequest({ request: req, env }) {
     }
   }
 
-  const a = await auth(req, env, db);
+  const spec = req.headers.get("x-spec") === "1";
+  const a = spec ? await watchAuth(req, env, db) : await auth(req, env, db);
   if (a instanceof Response) return a;
   const { rec, reg, store } = a;
-  const bump = () => store.set("_v", { v: Date.now() });
+  // _v changes on every write (so teammates re-download); _pv only when something a spectator can see changed (not notes or settings)
+  const bump = async (publicToo = true) => { const v = { v: Date.now() }; await store.set("_v", v); if (publicToo) await store.set("_pv", v); };
+  if (spec && !["/login", "/version", "/state", "/import"].includes(path)) return json({ error: "Spectators can only look" }, 403);
 
   try {
-    if (path === "/login") return json({ ok: true, team: pub(rec) });
+    if (path === "/login") return json({ ok: true, team: pub(rec), spectator: spec });
+
+    if (path === "/spectators") { // let spectators watch this team, or not
+      const body = req.method === "POST" ? await req.json() : {};
+      await reg.set(rec.number, { ...rec, nospec: body.on === false });
+      return json({ ok: true, on: body.on !== false });
+    }
 
     if (path === "/rotate") { // make a new team code; the old one stops working
       const code = newCode();
@@ -393,8 +417,21 @@ export async function onRequest({ request: req, env }) {
     }
 
     if (path === "/version") {
-      const v = await store.get("_v");
+      const v = await store.get(spec ? "_pv" : "_v");
       return json({ v: v ? v.v : 0 });
+    }
+
+    if (path === "/state" && spec) { // only the VEX Events data; no notes, no config (scout names), no picklist
+      const pubCols = ["events", "teams", "matches", "rankings", "stats"];
+      const sel = db.prepare("SELECT id, json FROM docs WHERE collection = ?1 ORDER BY id");
+      const res = await db.batch([...pubCols.map((c) => sel.bind(rec.store + "/" + c)), sel.bind(rec.store + "/_meta")]);
+      const out = { notes: [], config: [] };
+      pubCols.forEach((c, i) => { out[c] = res[i].results.map((r) => ({ id: r.id, ...JSON.parse(r.json) })); });
+      out.events = out.events.map(({ picks, ...e }) => e);
+      const v = res[pubCols.length].results.find((r) => r.id === "_pv");
+      out.v = v ? JSON.parse(v.json).v : 0;
+      out.rk = false;
+      return json(out);
     }
 
     if (path === "/state") {
@@ -405,6 +442,7 @@ export async function onRequest({ request: req, env }) {
       const v = res[COLS.length].results.find((r) => r.id === "_v");
       out.v = v ? JSON.parse(v.json).v : 0;
       out.rk = !!rec.rk; // whether the team has a recovery key
+      out.spec = !rec.nospec; // whether spectators may watch
       return json(out);
     }
 
@@ -422,7 +460,7 @@ export async function onRequest({ request: req, env }) {
           await store.set(key, { ...old, ...data });
         } else await store.set(key, data || {});
       }
-      await bump();
+      await bump(col !== "notes" && col !== "config");
       return json({ ok: true });
     }
 
@@ -490,6 +528,7 @@ export async function onRequest({ request: req, env }) {
       if (!SKU.test(sku)) return json({ error: "That doesn't look like an event code (e.g. RE-V5RC-26-5068 or VE-V5-26-66510). You can also paste the event page link." }, 400);
       const eid = sku.toLowerCase();
       const old = await store.get("events/" + eid);
+      if (spec && !(body.light && old && old.reid)) return json({ ok: true, skipped: true, eventId: eid });
 
       // quick refresh (every few seconds): matches and scores only, and only writes if something changed
       if (body.light && old && old.reid) {

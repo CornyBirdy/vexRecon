@@ -15,6 +15,11 @@ Every team's scouting is private to that team. Event lists, matches and rankings
 4. On the Event tab, use **Find an event** (your team's events, what's coming up, or earlier this season; search by name,
    city or code) and tap **Add**. Or type an event code (e.g. `RE-V5RC-26-5068` or `VE-V5-26-66510`) or paste the event page link, and press **Import**.
 
+**Spectators.** Parents, friends and other teams can choose **Spectator** on the sign-in screen and enter a team number, no code,
+to follow that team: matches with times and fields, rankings, OPR and skills, view-only. They never get the team's scouting
+notes, scout names or picklist, and the server rejects anything that would change data. The team has to be on Recon already.
+A team can turn this off in Team settings → Spectators.
+
 Lost the code? Anyone already signed in can see it in **Team settings** (Event tab → More), and can make a
 new one there; the old one then stops working on every phone.
 
@@ -25,7 +30,7 @@ without a key (set up before keys existed) make one in Team settings → Recover
 can reset the code (see Admin).
 
 ## What's in it
-- **Matches**: your matches or all of them, scores, W/L, and strategy / partner / opposition notes per match.
+- **Matches**: your matches or all of them, when each is scheduled and which field it's on, scores, W/L, and strategy / partner / opposition notes per match.
 - **Event tab**: one place for the event. The picker sits on top, then **Teams** (searchable, with rank, skills and OPR on
   each row), **Rankings**, **Skills** and **More** (event notes, import another event, team settings).
 - **Scouting**: the Scout tab is the one place to write it (a team's page has a **Scout this team** button that opens it).

@@ -303,7 +303,8 @@ nav { background: var(--g-fill), var(--g-bar); box-shadow: var(--g-edge), 0 14px
 nav button:hover, .seg button:hover { background: transparent !important; filter: none !important; }
 nav button:hover { color: var(--ink); }
 html, body, #app { overflow-anchor: none; }
-html, body { overflow-x: clip; }
+/* No overflow on html or body: it propagates to the viewport, and on iPhone a clipped viewport makes the fixed tab bar drift around while you scroll.
+   The app column (#appclip) does the clipping for the slide animation instead. */
 
 /* the app column clips the sliding pages, so on a wide screen nothing travels across the side margins */
 #appclip { max-width: 860px; margin: 0 auto; overflow-x: clip; }
@@ -324,3 +325,11 @@ html, body { overflow-x: clip; }
 .hr { margin-left: auto; }
 #sync { flex: 0 1 auto; white-space: nowrap; }
 @media (max-width: 479px) { #sync .sl { display: none; } #sync { padding: 0 14px; } }
+
+/* match time and field, under the match number */
+.mwhen { display: flex; align-items: center; gap: 6px; margin: var(--s-1) 0 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.mwhen svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.card.next .mwhen { margin: 0 0 var(--s-1); }
+
+/* the tab bar gets its own compositing layer, pinned to the bottom of the screen, so iPhone Safari can't slide it with the page */
+nav { transform: translate3d(0, 0, 0); -webkit-transform: translate3d(0, 0, 0); will-change: transform; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
