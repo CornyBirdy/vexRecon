@@ -195,6 +195,7 @@ async function flush() {
       }
       outbox = outbox.filter(x => x !== item); lsJ('outbox', outbox);
     }
+    if (pq.length) phFlush();
   } finally { inflight = null; flushing = false; setStatus() }
 }
 
@@ -215,7 +216,7 @@ async function pull() {
 async function poll() {
   if (polling || document.hidden || !signedIn()) return; polling = true;
   try {
-    if (outbox.length) await flush();
+    if (outbox.length) await flush(); else if (pq.length) phFlush();
     const d = await api('/version'); online = true;
     if (d.v !== lastV) await pull(); else { lastSync = Date.now(); setStatus() }
   } catch (e) { if (e instanceof NetErr) { online = false; setStatus() } }
@@ -305,7 +306,7 @@ function recoverHTML(err) {
 }
 // signing in as a different team than last time: drop that team's cached data and unsent changes
 function useTeam(t, info) {
-  if (ls('lastTeam') !== t) { outbox = []; lsJ('outbox', []); lsJ('cache', null); for (const k of COLS) S[k] = []; ev = ''; ls('ev', ''); name = ''; ls('name', ''); lastV = -1; loaded = false }
+  if (ls('lastTeam') !== t) { outbox = []; lsJ('outbox', []); pq = []; savePq(); for (const k in PH) delete PH[k]; lsJ('cache', null); for (const k of COLS) S[k] = []; ev = ''; ls('ev', ''); name = ''; ls('name', ''); lastV = -1; loaded = false }
   team = t; teamInfo = info || {}; ls('team', t); ls('lastTeam', t); lsJ('teamInfo', teamInfo);
 }
 
@@ -470,6 +471,7 @@ function render() {
   if (mTeam && !modalShown) { md.style.display = 'block'; if (!reduced()) replay(md, 'opening') }
   else if (!mTeam) md.style.display = 'none';
   modalShown = !!mTeam;
+  if (mTeam && mTeam[0] !== ':' && !spec && mTeam !== US && signedIn()) phLoad(mTeam);
   seenNotes = new Set(S.notes.map(n => n.id));
   renderedAt = performance.now();
   ebKick();
@@ -924,6 +926,92 @@ const sum = n => {
     grp('Overall', kv('Overall rating', r5(n.overall)), (g => g ? kv('Suggested overall', g.avg.toFixed(1) + ' / 5') : '')(suggest(n)), kv('Good team?', esc(n.good || '')), tx('Comments', n.comments)) + `</div>`;
 };
 
+// ---------- Robot photos ----------
+// Photos are shrunk on the phone (about 1000 px, 100-150 KB) and kept in D1 beside the team's other data, but not in the synced
+// state: a team's photos are fetched when its page opens. New ones wait in a queue (localStorage) until there is a connection.
+// The server keeps photos for the team's 5 most recent events only, so older ones vanish by themselves.
+const PH = {}; // `${event}|${team}` -> photos from the server
+let pq = lsJ('pq') || [], phBusy = false, phFor = null;
+const phKey = (e, t) => e + '|' + t;
+const savePq = () => { try { localStorage.setItem('pq', JSON.stringify(pq)); return true } catch (e) { return false } };
+const phList = num => [...((PH[phKey(ev, num)] || {}).list || []), ...pq.filter(q => q.eventId === ev && q.team === num).map(q => ({ ...q, wait: true }))];
+async function phLoad(num) {
+  const k = phKey(ev, num), cur = PH[k]; if (cur && (cur.busy || Date.now() - cur.at < 30000)) return;
+  PH[k] = { list: cur ? cur.list : [], at: 0, busy: true };
+  try { const d = await api('/photos', { eventId: ev, team: num }); PH[k] = { list: d.photos || [], at: Date.now() } }
+  catch (e) { PH[k] = { list: cur ? cur.list : [], at: Date.now() - 20000 } }
+  if (mTeam === num) render();
+}
+async function phFlush() {
+  if (phBusy || !code || spec) return; phBusy = true;
+  try {
+    while (pq.length) {
+      const q = pq[0];
+      try {
+        const d = await api('/photo', { mode: 'add', id: q.id, eventId: q.eventId, team: q.team, img: q.img, by: q.by });
+        const e = PH[phKey(q.eventId, q.team)]; if (e) e.list = [...e.list.filter(x => x.id !== q.id), d.photo];
+      } catch (e) {
+        if (e instanceof NetErr || e instanceof AuthErr) break;
+        toast('A photo couldn’t be saved: ' + e.message); // rejected by the server: drop it
+      }
+      pq.shift(); savePq();
+    }
+  } finally { phBusy = false; if (mTeam) render(); setStatus() }
+}
+// Read the picture, turn it upright, scale it down and compress until it is small enough.
+async function phShrink(file) {
+  let src, w, h, done = () => { };
+  if (window.createImageBitmap) { try { src = await createImageBitmap(file, { imageOrientation: 'from-image' }); w = src.width; h = src.height; done = () => src.close && src.close() } catch (e) { src = null } }
+  if (!src) {
+    const u = URL.createObjectURL(file); src = new Image(); src.src = u; await src.decode(); w = src.naturalWidth; h = src.naturalHeight; done = () => URL.revokeObjectURL(u);
+  }
+  try {
+    let side = 1000;
+    for (let tries = 0; tries < 6; tries++) {
+      const k = Math.min(1, side / Math.max(w, h)), c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+      c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+      for (const q of [0.72, 0.6, 0.5]) { const u = c.toDataURL('image/jpeg', q); if (u.length <= 190000) return u }
+      side = Math.round(side * 0.8);
+    }
+    throw new Error('too big');
+  } finally { done() }
+}
+async function phAdd(files, num) {
+  if (spec || !num) return;
+  const have = phList(num).length, room = 3 - have;
+  if (room <= 0) { toast('That team already has 3 photos. Delete one first.'); return }
+  const list = [...files].filter(f => /^image\//.test(f.type) || !f.type).slice(0, room);
+  if (files.length > room) toast('Only ' + room + ' more photo' + (room === 1 ? '' : 's') + ' fit for this team.');
+  for (const f of list) {
+    try {
+      const img = await phShrink(f);
+      pq.push({ id: 'ph_' + uid(), eventId: ev, team: num, img, by: name || '', t: Date.now() });
+      if (!savePq()) { pq.pop(); toast('Your phone has no room to keep that photo. Connect and send the waiting ones first.'); break }
+    } catch (e) { toast('That photo couldn’t be read. Try another.') }
+  }
+  render(); phFlush();
+}
+const phInput = (() => { // lives outside the page so a refresh can't drop it while the camera is open
+  const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.multiple = true; i.hidden = true; i.setAttribute('aria-hidden', 'true');
+  i.addEventListener('change', () => { const f = [...i.files], t = phFor; i.value = ''; if (f.length) phAdd(f, t) });
+  document.addEventListener('DOMContentLoaded', () => document.body.appendChild(i)); if (document.body) document.body.appendChild(i);
+  return i;
+})();
+function phPick(num, cam) { phFor = num; if (cam) phInput.setAttribute('capture', 'environment'); else phInput.removeAttribute('capture'); phInput.multiple = !cam; phInput.click() }
+function phView(id) {
+  const p = phList(mTeam).find(x => x.id === id); if (!p) return;
+  const d = document.createElement('div'); d.id = 'phv'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Robot photo'); d.tabIndex = -1;
+  d.innerHTML = `<img src="${p.img}" alt="Robot photo of team ${esc(p.team)}"><button class="p" type="button">Close</button>`;
+  const end = () => { document.removeEventListener('keydown', key, true); d.remove() }, key = e => { if (e.key === 'Escape') { e.stopPropagation(); end() } };
+  d.addEventListener('click', end); document.addEventListener('keydown', key, true); document.body.appendChild(d); d.querySelector('button').focus();
+}
+function photosCard(num) {
+  const ph = phList(num), cur = PH[phKey(ev, num)], full = ph.length >= 3;
+  return `<div class="card"><h2>Robot photos</h2><p class="mut">Up to 3 per team. Photos are kept for your 5 most recent events, then removed.</p>
+  ${ph.length ? `<div class="phgrid">${ph.map(p => `<div class="ph"><button type="button" class="phimg" data-act="phview" data-id="${esc(p.id)}" aria-label="View photo"><img src="${p.img}" alt="Robot photo of team ${esc(p.team)}" loading="lazy"></button>${p.wait ? '<span class="phwait">Waiting to send</span>' : `<button type="button" class="x" data-act="phdel" data-id="${esc(p.id)}" aria-label="Delete photo">×</button>`}</div>`).join('')}</div>` : `<p class="mut">${cur && cur.busy ? 'Loading photos…' : 'No photos yet.'}</p>`}
+  <div class="foot"><button data-act="phgal" data-t="${esc(num)}" ${full ? 'disabled' : ''}>From gallery</button><button class="p" data-act="phcam" data-t="${esc(num)}" ${full ? 'disabled' : ''}>Take photo</button></div></div>`;
+}
+
 // Everything the VEX app shows for a team, for the whole season: skills, record, event history, awards.
 function seasonCard(num) {
   const e = evObj(), d = stDoc(), s = d && d.teams && d.teams[num];
@@ -958,6 +1046,7 @@ function vTeam(num) {
   const avg = f => { const v = sc.map(s => parseFloat(s[f])).filter(x => x > 0); return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-' };
   return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) + `<button class="p wide" data-act="scoutfrom" data-t="${esc(num)}">Scout this team</button>
   ${(() => { const st = stats(), r = st.by.get(num); return r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '' })()}
+  ${photosCard(num)}
   ${seasonCard(num)}
   <div class="card"><h2>Scouting averages</h2><p class="mut">From ${sc.length} ${sc.length === 1 ? 'entry' : 'entries'}. Ratings are out of 5.</p>${sc.length ? tiles([[avg('autoPts'), 'Auto points'], [avg('driver'), 'Driver skill'], [avg('speed'), 'Speed'], [avg('scoring'), 'Scoring'], [avg('scoreSpeed'), 'Scoring speed'], [(c => c === '-' ? c : c + ' s')(avg('cycleTime')), 'Cycle time'], [avg('durability'), 'Durability'], [avg('overall'), 'Overall'], [(v => v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-')(sc.map(x => suggest(x)).filter(Boolean).map(g => g.avg)), 'Suggested overall', 'average of the ratings']]) : ''}</div>
   <div class="card"><h2>Matches</h2>${ms.map(m => `<span class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}">${esc(m.label)}</span>`).join('') || '<span class="mut">None</span>'}</div>
@@ -1163,6 +1252,17 @@ document.addEventListener('click', e => {
   else if (a === 'import') doImport(v('sku'), sayIn('impmsg'));
   else if (a === 'reimport') { if (spec) { const s = skuOf(evObj()), say = sayIn('impmsg2'); say('Checking…'); api('/import', { sku: s, light: true }).then(() => pull()).then(() => say('')).catch(e => say('Couldn’t check: ' + String(e.message || e).slice(0, 100))) } else doImport(skuOf(evObj()), sayIn('impmsg2')) }
   else if (a === 'team') { mTeam = b.dataset.t; render() }
+  else if (a === 'phcam') phPick(b.dataset.t, true)
+  else if (a === 'phgal') phPick(b.dataset.t, false)
+  else if (a === 'phview') phView(b.dataset.id)
+  else if (a === 'phdel') {
+    const id = b.dataset.id, t = mTeam;
+    ask('Delete this photo?', 'It is removed for everyone on your team.', 'Delete').then(async ok => {
+      if (!ok) return;
+      try { await api('/photo', { mode: 'delete', id }); const e = PH[phKey(ev, t)]; if (e) e.list = e.list.filter(x => x.id !== id); render() }
+      catch (err) { toast(err instanceof NetErr ? 'You need a connection to delete a photo.' : 'Couldn’t delete: ' + err.message) }
+    });
+  }
   else if (a === 'close') closeModal();
   else if (a === 'addev') { const n = v('newev'); if (n) { const id = uid(); put('events', id, { name: n, link: '', picks: [] }); ev = id; ls('ev', id) } }
   else if (a === 'delev') { if (sure(b)) { send({ purge: ev }); ev = S.events[0] ? S.events[0].id : ''; ls('ev', ev) } }

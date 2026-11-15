@@ -4,6 +4,10 @@
 
 const COLS = ["events", "teams", "matches", "notes", "config", "rankings", "stats"];
 const IDOK = /^[A-Za-z0-9_.\-]{1,200}$/;
+// Robot photos live in their own collection "<store>/photos" of the same table (not in COLS, so they never ride along with /state).
+// Each is a small JPEG/WebP the phone has already shrunk, kept as a data URL. Only the team's 5 most recent events keep theirs.
+const PHOTO = /^data:image\/(jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+const PHOTO_MAX = 220000, PHOTO_PER_TEAM = 3, PHOTO_EVENTS = 5, PHOTO_TOTAL = 600;
 // Event codes: RE-V5RC-26-5068, VE-V5-26-66510 ... The box may also hold a pasted event page link, so pull the code out of it.
 const SKU = /^[A-Z]{2,4}-[A-Z0-9]{2,8}-\d{2}-\d{3,7}$/;
 const SKU_IN = /(?<![A-Z0-9])[A-Z]{2,4}-[A-Z0-9]{2,8}-\d{2}-\d{3,7}(?![0-9])/i;
@@ -54,6 +58,20 @@ class Store {
   async setMany(pairs) { // D1 batches are one round trip each; keep them modest
     for (let i = 0; i < pairs.length; i += 50) await this.db.batch(pairs.slice(i, i + 50).map(([k, v]) => this.put(k, v)));
   }
+}
+
+// The events whose photos are kept: this team's PHOTO_EVENTS most recent by start date (an event with no date counts as newest).
+async function photoEvents(db, rec) {
+  const { results } = await db.prepare("SELECT id, json FROM docs WHERE collection = ?1").bind(rec.store + "/events").all();
+  return results.map((r) => ({ id: r.id, start: String(JSON.parse(r.json).start || "9999") }))
+    .sort((a, b) => (a.start < b.start ? 1 : a.start > b.start ? -1 : 0)).slice(0, PHOTO_EVENTS).map((e) => e.id);
+}
+// Remove photos of events that are no longer among the kept ones. Returns the kept event ids.
+async function photoCleanup(db, rec) {
+  const keep = await photoEvents(db, rec), col = rec.store + "/photos";
+  if (keep.length) await db.prepare(`DELETE FROM docs WHERE collection = ?1 AND json_extract(json, '$.eventId') NOT IN (${keep.map((_, i) => "?" + (i + 2)).join(",")})`).bind(col, ...keep).run();
+  else await db.prepare("DELETE FROM docs WHERE collection = ?1").bind(col).run();
+  return keep;
 }
 
 // ---------- VEX Events (RobotEvents) client ----------
@@ -464,6 +482,31 @@ export async function onRequest({ request: req, env }) {
       return json({ ok: true });
     }
 
+    // Robot photos: /photos lists a team's photos at an event, /photo adds or deletes one. Never part of /state.
+    if (path === "/photos") {
+      const eid = String(body.eventId || ""), t = String(body.team || "");
+      if (!IDOK.test(eid) || !IDOK.test(t)) return json({ error: "Bad request" }, 400);
+      await photoCleanup(db, rec);
+      const { results } = await db.prepare("SELECT id, json FROM docs WHERE collection = ?1 AND json_extract(json, '$.eventId') = ?2 AND json_extract(json, '$.team') = ?3").bind(rec.store + "/photos", eid, t).all();
+      return json({ ok: true, photos: results.map((r) => ({ id: r.id, ...JSON.parse(r.json) })).sort((a, b) => a.t - b.t) });
+    }
+    if (path === "/photo") {
+      const { mode, id } = body;
+      if (!IDOK.test(id || "")) return json({ error: "Bad request" }, 400);
+      if (mode === "delete") { await store.delete("photos/" + id); return json({ ok: true }); }
+      const eid = String(body.eventId || ""), t = String(body.team || ""), img = String(body.img || "");
+      if (!IDOK.test(eid) || !IDOK.test(t) || img.length > PHOTO_MAX || !PHOTO.test(img)) return json({ error: "That photo can’t be saved" }, 400);
+      if (!(await photoCleanup(db, rec)).includes(eid)) return json({ error: "Photos are only kept for your " + PHOTO_EVENTS + " most recent events" }, 400);
+      const col = rec.store + "/photos";
+      const n = await db.prepare("SELECT COUNT(*) AS n FROM docs WHERE collection = ?1 AND id != ?2 AND json_extract(json, '$.eventId') = ?3 AND json_extract(json, '$.team') = ?4").bind(col, id, eid, t).first("n");
+      if (n >= PHOTO_PER_TEAM) return json({ error: "That team already has " + PHOTO_PER_TEAM + " photos. Delete one first." }, 400);
+      const all = await db.prepare("SELECT COUNT(*) AS n FROM docs WHERE collection = ?1").bind(col).first("n");
+      if (all >= PHOTO_TOTAL) return json({ error: "Your team has used up its photo space. Delete some photos." }, 400);
+      const doc = { eventId: eid, team: t, img, by: String(body.by || "").slice(0, 60), t: Date.now() };
+      await store.set("photos/" + id, doc);
+      return json({ ok: true, photo: { id, ...doc } });
+    }
+
     // delete an event together with everything that belongs to it (teams, matches, notes)
     if (path === "/purge") {
       const eid = String(body.eventId || "");
@@ -471,10 +514,10 @@ export async function onRequest({ request: req, env }) {
       const del = db.prepare("DELETE FROM docs WHERE collection = ?1 AND json_extract(json, '$.eventId') = ?2");
       const res = await db.batch([
         store.drop("events/" + eid),
-        ...["teams", "matches", "notes", "rankings", "stats"].map((c) => del.bind(rec.store + "/" + c, eid)),
+        ...["teams", "matches", "notes", "rankings", "stats", "photos"].map((c) => del.bind(rec.store + "/" + c, eid)),
         ...["_mh_", "_imp_", "_rk_", "_stl_"].map((p) => store.drop(p + eid)),
       ]);
-      const deleted = res.slice(0, 6).reduce((n, r) => n + ((r.meta && r.meta.changes) || 0), 0);
+      const deleted = res.slice(0, 7).reduce((n, r) => n + ((r.meta && r.meta.changes) || 0), 0);
       await bump();
       return json({ ok: true, deleted });
     }
