@@ -12,7 +12,7 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ### Changed
 - **The Team names button animates.** The names open downward under each team number (the chip keeps its width and only grows taller, over about a quarter of a second) and close the same way, instead of the chips jumping wider. Reduced-motion users get it instantly.
-- **The winning alliance no longer glows.** Instead its box fades in its colour from the outer edge (left or right), so the teams and scores stay easy to read, and the winner's score is bigger than the loser's.
+- **The winning alliance no longer glows.** Instead its box fades in its colour up from the bottom, so the teams and scores at the top stay easy to read, and the winner's score is bigger than the loser's.
 - **Match times sit on two lines.** The scheduled time and field are on the first line; the second line says when the match started and how late (green, amber or red), or when to expect it if the event is running behind. Long lines no longer wrap awkwardly.
 
 ## [1.3.0] - 2026-11-16: Live skills, match delays, winner glow

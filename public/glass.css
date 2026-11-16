@@ -334,7 +334,7 @@ html, body, #app { overflow-anchor: none; }
 /* the tab bar gets its own compositing layer, pinned to the bottom of the screen, so iPhone Safari can't slide it with the page */
 nav { transform: translate3d(0, 0, 0); -webkit-transform: translate3d(0, 0, 0); will-change: transform; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 
-/* match cards: score inside each alliance box; the winner's box fades in its colour from its outer edge and its score is bigger */
+/* match cards: score inside each alliance box; the winner's box fades in its colour up from the bottom and its score is bigger */
 .vs .shead{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s-2)}
 .vs .shead>span{font-size:12px;font-weight:700;color:var(--ink-muted)}
 .vs .side.mine .shead>span,.vs .side.win .shead>span{color:var(--ink)}
@@ -345,8 +345,7 @@ nav { transform: translate3d(0, 0, 0); -webkit-transform: translate3d(0, 0, 0); 
 .vs .side.win.b{--wbase:color-mix(in oklab,var(--alliance-blue) 20%,var(--card));--wedge:color-mix(in oklab,var(--alliance-blue) var(--win-a),var(--card))}
 .vs .side.win.mine.r{--wbase:color-mix(in oklab,var(--alliance-red) 36%,var(--card))}
 .vs .side.win.mine.b{--wbase:color-mix(in oklab,var(--alliance-blue) 36%,var(--card))}
-.vs .side.win:first-child{background:linear-gradient(90deg,var(--wedge) 0,var(--wbase) 60%)}
-.vs .side.win:last-child{background:linear-gradient(270deg,var(--wedge) 0,var(--wbase) 60%)}
+.vs .side.win.r,.vs .side.win.b{background:linear-gradient(0deg,var(--wedge) 0,var(--wbase) 62%)}
 /* target vs actual match time */
 .mwstat{margin:2px 0 0 21px;font-size:13px;line-height:1.35}
 .card.next .mwstat{margin-bottom:var(--s-1)}

@@ -225,7 +225,7 @@
 :root { --mine-a: 26%; --accent-2: #a6ece5; --accent-3: #2a9d93; }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --mine-a: 17%; --accent-2: #2a9d93; --accent-3: #7fcfc7; } }
 :root[data-theme="light"] { --mine-a: 17%; --accent-2: #2a9d93; --accent-3: #7fcfc7; }
-/* the winning alliance's box on a match card: how strong its colour is at the outer edge before it fades out */
+/* the winning alliance's box on a match card: how strong its colour is at the outer edge at the bottom of the box before it fades out upward */
 :root { --win-a: 48%; }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --win-a: 38%; } }
 :root[data-theme="light"] { --win-a: 38%; }
