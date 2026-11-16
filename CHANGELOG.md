@@ -6,6 +6,8 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-16: Skills runs, jump to matches, animated team names
+
 ### Added
 - **Skills show how many runs each team did.** Under each driver and autonomous score on the Skills tab (This event) it says "2 runs", and a line under the table gives the totals so far, like the VEX Events app.
 - **Tap a match on a team's page to see it in the match list.** The match chips on a team's page now open Matches → By team with that team already picked, scrolled to the match you tapped.
