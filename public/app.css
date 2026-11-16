@@ -319,6 +319,9 @@ body.out #sync{display:none}
 
 /* match cards: show team names */
 .mtools{display:flex;justify-content:flex-end;margin:var(--s-2) 0 0}
-.chip.nm{display:block;width:100%;max-width:100%;text-align:left}
-.chip.nm small{display:block;font:400 12.5px/1.3 var(--font);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;color:inherit}
+.chip.mc{display:block;width:100%;max-width:100%;text-align:left}
+/* the name opens downward under the number: the row grows from 0 to its height, so the chip never widens or jumps sideways */
+.chip.mc .nmw{display:grid;grid-template-rows:0fr;opacity:0;visibility:hidden;transition:grid-template-rows var(--dur-3) var(--ease),opacity var(--dur-2) var(--ease),visibility 0s linear var(--dur-3)}
+.chip.mc .nmw small{display:block;min-height:0;overflow:hidden;font:400 12.5px/1.35 var(--font);text-overflow:ellipsis;white-space:nowrap;color:inherit}
+body.mnames .chip.mc .nmw{grid-template-rows:1fr;opacity:1;visibility:visible;transition-delay:0s}
 .vs .side{min-width:0}

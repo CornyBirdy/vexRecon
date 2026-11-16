@@ -872,7 +872,8 @@ function sideBox(m, c, label, arr, col, mine) {
   return `<div class="side ${c} ${mine ? 'mine' : ''} ${won ? 'win' : ''}"><div class="shead"><span>${label}</span>${sc ? `<b class="ascore">${score}${won ? '<i class="sr"> (won)</i>' : ''}</b>` : ''}</div>${chips(m, arr)}</div>`;
 }
 let mnames = ls('mnames') === '1'; // show each team's name under its number on match cards
-const chips = (m, arr) => arr.map(n => { const nm = mnames ? tName(n) : ''; return `<button class="chip ${nm ? 'nm ' : ''}${n === US ? 'me' : cls(m, n)}" data-act="team" data-t="${n}">${n}${nm ? `<small>${esc(nm)}</small>` : ''}</button>` }).join('');
+document.body.classList.toggle('mnames', mnames); // the names are always in the card; this class opens them (animated, growing downward)
+const chips = (m, arr) => arr.map(n => { const nm = tName(n); return `<button class="chip mc ${n === US ? 'me' : cls(m, n)}" data-act="team" data-t="${n}">${n}${nm ? `<span class="nmw"><small>${esc(nm)}</small></span>` : ''}</button>` }).join('');
 function vMatches() {
   if (!evObj()) return empty('Pick an event first.');
   const all = matches(), inT = m => m.red.includes(mfT) || m.blue.includes(mfT), list = mf === 'all' ? all : mf === 'team' ? (mfT ? all.filter(inT) : []) : all.filter(m => side(m));
@@ -1333,7 +1334,7 @@ document.addEventListener('click', e => {
   else if (a === 'import') doImport(v('sku'), sayIn('impmsg'));
   else if (a === 'reimport') { if (spec) { const s = skuOf(evObj()), say = sayIn('impmsg2'); say('Checking…'); api('/import', { sku: s, light: true }).then(() => pull()).then(() => say('')).catch(e => say('Couldn’t check: ' + String(e.message || e).slice(0, 100))) } else doImport(skuOf(evObj()), sayIn('impmsg2')) }
   else if (a === 'team') { mTeam = b.dataset.t; render() }
-  else if (a === 'mnames') { mnames = !mnames; ls('mnames', mnames ? '1' : '0'); render() }
+  else if (a === 'mnames') { mnames = !mnames; ls('mnames', mnames ? '1' : '0'); document.body.classList.toggle('mnames', mnames); b.classList.toggle('on', mnames); b.setAttribute('aria-pressed', mnames) } // no re-render, so the names can animate open
   else if (a === 'agedit') { agEdit = !agEdit; render() }
   else if (a === 'agadd') {
     const d = v('ag_d'), t = v('ag_t'), x = v('ag_x'), n = v('ag_n'), e = evObj(), cur = Array.isArray(e.agenda) ? e.agenda : [];
