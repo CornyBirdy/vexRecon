@@ -621,6 +621,9 @@ function recStat(ours) {
 // ---------- Agenda ----------
 // The day's schedule (registration, inspection, matches begin ...), typed in by the team and shared with it (and with spectators).
 // Kept on the event as e.agenda = [{ id, d: 'YYYY-MM-DD', t: 'HH:MM', x: title, n: note }]; times are the clock times as typed, shown in the device's format.
+// The agenda is switched off for now (VEX Events doesn't give us the agenda, so it has to be typed in). All of the code below is kept;
+// set AGENDA_ON to true to show the Agenda card on the Event home again.
+const AGENDA_ON = false;
 let agEdit = false;
 const dayKey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const agDate = (d, t) => { const [y, m, dd] = d.split('-').map(Number), [h, mi] = String(t || '0:0').split(':').map(Number); return new Date(y, m - 1, dd, h || 0, mi || 0) };
@@ -663,7 +666,7 @@ function vHome() {
   }
   return `<div class="home"><div class="greet"><div><p class="live ${stat.cls}">${stat.html}</p><h1>${spec ? esc(teamInfo.name || US) : esc(name || US)}${!spec && name ? ' <button class="link namechg" data-act="setname" data-v="">Change</button>' : ''}</h1></div></div>
   <section class="panel"><div class="phead"><h2>Event overview</h2></div>${rankStat(st, me, ts)}${recStat(ours)}</section>
-  ${nx}${agendaCard(e)}</div>`;
+  ${nx}${AGENDA_ON ? agendaCard(e) : ''}</div>`;
 }
 
 function vEvent() {

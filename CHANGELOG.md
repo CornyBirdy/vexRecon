@@ -6,6 +6,9 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+### Removed
+- **The Agenda card is hidden for now.** VEX Events doesn't give us the agenda, so it had to be typed in by hand. Anything already typed in is kept and will show again if the card is turned back on.
+
 ## [1.2.0] - 2026-11-16: Robot photos, Agenda, team names
 
 ### Added
