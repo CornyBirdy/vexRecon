@@ -51,6 +51,7 @@ can reset the code (see Admin).
   shrinks each to about 150 KB before sending, and with no signal they wait and upload later. They sit in D1 in their own
   `photos` collection (no extra table or storage service, nothing to set up), are fetched only when a team's page opens, and are
   never shown to spectators. A team keeps photos for its 5 most recent events (by start date); older ones are deleted automatically.
+- **Bracket**: once the finals begin, Matches → Bracket shows every elimination round with the scores and winners, and empty slots for what's still to come.
 - **Picklist**: drag or use the arrows; rank and OPR shown on each row. Alliance requests live here too, with an **Add to picklist** button.
 - **Live and offline**: teammates' changes show up within seconds; with no signal, changes are kept on the phone
   and sent when it's back (the header shows `Offline · 3 unsaved`).

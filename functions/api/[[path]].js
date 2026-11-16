@@ -119,7 +119,7 @@ async function matchDocs(x, eid, reid, divs) {
       const r = m.round, n = m.matchnum;
       const label = r === 1 || r === 2 ? PRE[r] + n : r === 5 ? "F" + n : (PRE[r] || "M") + m.instance + "-" + n;
       docs.push([`matches/${eid}_${d}_${r}_${m.instance}_${n}`, {
-        eventId: eid, label, round: r, order: (BASE[r] ?? 9000) + (m.instance || 0) * 100 + n,
+        eventId: eid, label, round: r, inst: m.instance || 0, n, order: (BASE[r] ?? 9000) + (m.instance || 0) * 100 + n, // inst = the bracket slot in an elimination round (QF #2), n = which match of that series
         red: tm(al("red")), blue: tm(al("blue")),
         field: m.field ? String(m.field) : "", sched: m.scheduled || null, ran: m.started || null, // field name, scheduled time, time it actually started (as VEX Events gives them, with the venue's UTC offset)
         rs: done(m) && al("red") ? al("red").score : null, bs: done(m) && al("blue") ? al("blue").score : null,
