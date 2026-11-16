@@ -12,7 +12,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
 const slug = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-const APP = { name: 'Recon', version: '1.2.1' };
+const APP = { name: 'Recon', version: '1.3.0' };
 // Signed in as one team: its number is "us" everywhere. Scout names are the team's own list (Team settings).
 let US = '', NAMES = [];
 const COLS = ['events', 'teams', 'matches', 'notes', 'config', 'rankings', 'stats'];
@@ -564,6 +564,11 @@ const settingsCard = () => `<details class="card" id="d-settings" ${det('d-setti
   <div class="foot"><span class="grow"></span><button class="d" data-act="logout">Log out</button></div></details>`;
 // What's new, in plain words (the full history is CHANGELOG.md). Newest first; add a line here when something users will notice changes.
 const CHANGES = [
+  ['1.3.0', [
+    'Skills now show and update during the event, straight from the event’s live skills on VEX Events, instead of waiting hours for the season stats.',
+    'Match times show the scheduled time and when the match really started, with how late it was in green, amber or red. Matches still to come show when to expect them if the event is running behind.',
+    'The winning alliance glows on every match, instead of a W or L chip, and each score sits in its own alliance box.',
+    'Our team’s highlight is softer.']],
   ['1.2.1', [
     'Scores now show on the match cards, and Next match, W/L, rank and OPR update as matches finish. Some events never tick VEX Events’ “scored” flag, which used to hide every score.',
     'Match times are shown in your own time zone, matching the VEX Events app.',

@@ -6,6 +6,8 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-16: Live skills, match delays, winner glow
+
 ### Added
 - **Target and actual match times.** Each match shows when it was scheduled and, once VEX Events says it started, when it really started and how late: "10:00 am · started 10:14 am · +14 min". Green is on time (within 2 min), amber a few minutes late, red 10 or more. For matches still to come, if the event is running behind, they show "expect about 10:57 am · running 30 min behind" worked out from the latest match that started.
 - **Winners glow.** In every match list, the winning alliance's box now has a gradient and a soft glow in its colour, replacing the W / L chip. A tie or an unplayed match has no glow.
