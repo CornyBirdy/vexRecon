@@ -31,16 +31,15 @@ const tName = n => { const t = teams().find(t => t.number === n); return t ? t.n
 const side = (m, n) => { const us = m.red.includes(US) ? 'red' : m.blue.includes(US) ? 'blue' : null; if (!us) return ''; if (!n) return us; const mine = m[us]; return mine.includes(n) ? 'ally' : (m.red.includes(n) || m.blue.includes(n)) ? 'opp' : '' };
 const cls = (m, n) => { if (n === US) return ''; const s = side(m, n); return s === 'ally' ? 'gn' : s === 'opp' ? 'rd' : '' };
 const scored = m => m.rs != null && (m.rs || m.bs);
-// When and where a match is played: "Sat 9:30 am · Field 2". VEX Events lists the time as the clock at the venue (plus a UTC offset
-// that isn't always right for the event: one event's offset put Q1 eight hours out), so the clock reading is used as it is and no
-// time-zone conversion is done. Everyone at the event, and spectators watching it, see the venue's clock.
+// When and where a match is played: "Sat 9:30 am · Field 2". VEX Events gives the time as a real moment (with a UTC offset that is
+// often not the venue's own, e.g. -05:00 for an Adelaide event), so it is converted to this device's own time zone, like every other
+// time in the app. Never read the clock digits straight off the string: they can be hours out.
 function whenOf(m) {
-  const t = String(m.sched || m.ran || ''), p = t.match(/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/), e = evObj();
+  const t = String(m.sched || m.ran || ''), d = t ? new Date(t) : null, e = evObj();
   let at = '';
-  if (p) {
-    const d = new Date(Date.UTC(+p[1], +p[2] - 1, +p[3], +p[4], +p[5]));
-    at = d.toLocaleTimeString([], { timeZone: 'UTC', hour: 'numeric', minute: '2-digit' });
-    if (e && e.end && String(e.end).slice(0, 10) !== String(e.start || '').slice(0, 10)) at = d.toLocaleDateString([], { timeZone: 'UTC', weekday: 'short' }) + ' ' + at; // a multi-day event: say which day
+  if (d && !isNaN(d)) {
+    at = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (e && e.end && String(e.end).slice(0, 10) !== String(e.start || '').slice(0, 10)) at = d.toLocaleDateString([], { weekday: 'short' }) + ' ' + at; // a multi-day event: say which day
   }
   const f = String(m.field || '').trim();
   return [at, f ? (/^\d+$/.test(f) ? 'Field ' + f : f) : ''].filter(Boolean).join(' · ');

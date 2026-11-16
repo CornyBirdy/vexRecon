@@ -104,6 +104,10 @@ function client(env) {
   return { re, all, left: () => FETCH_MAX - used, hasKey: !!env.ROBOTEVENTS_KEY };
 }
 
+// A match counts as played when VEX Events marks it scored, or, because some events never set that flag, when it has started and
+// either alliance has points (a match that hasn't started yet reads 0-0).
+const done = (m) => !!m.scored || (!!m.started && (m.alliances || []).some((a) => a.score > 0));
+
 // One request per division for matches (a division's matches fit in one page of 250).
 async function matchDocs(x, eid, reid, divs) {
   const docs = [];
@@ -118,7 +122,7 @@ async function matchDocs(x, eid, reid, divs) {
         eventId: eid, label, round: r, order: (BASE[r] ?? 9000) + (m.instance || 0) * 100 + n,
         red: tm(al("red")), blue: tm(al("blue")),
         field: m.field ? String(m.field) : "", sched: m.scheduled || null, ran: m.started || null, // field name, scheduled time, time it actually started (as VEX Events gives them, with the venue's UTC offset)
-        rs: m.scored && al("red") ? al("red").score : null, bs: m.scored && al("blue") ? al("blue").score : null,
+        rs: done(m) && al("red") ? al("red").score : null, bs: done(m) && al("blue") ? al("blue").score : null,
       }]);
     }
   }
