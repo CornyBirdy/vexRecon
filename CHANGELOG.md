@@ -6,6 +6,17 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+### Added
+- **Target and actual match times.** Each match shows when it was scheduled and, once VEX Events says it started, when it really started and how late: "10:00 am · started 10:14 am · +14 min". Green is on time (within 2 min), amber a few minutes late, red 10 or more. For matches still to come, if the event is running behind, they show "expect about 10:57 am · running 30 min behind" worked out from the latest match that started.
+- **Winners glow.** In every match list, the winning alliance's box now has a gradient and a soft glow in its colour, replacing the W / L chip. A tie or an unplayed match has no glow.
+
+### Changed
+- **Scores sit in their own alliance box**, top right, instead of "32–28" in the header, so it's obvious whose score is whose.
+- **Our team's highlight is softer.** Our team number is a soft teal ring and tint instead of a solid bright teal block.
+
+### Fixed
+- **Skills now show and update during the event.** They only came from a per-team season crawl that refreshes every 6 hours, so a skills run at the event didn't appear for hours. Recon now also reads the event's own live skills from VEX Events with every refresh (a single request), and these take over the season figures as soon as a team has a run. The Skills tab works even before the season stats are loaded.
+
 ## [1.2.1] - 2026-11-16: Scores and match times fixed
 
 ### Fixed

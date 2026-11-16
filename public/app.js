@@ -44,7 +44,26 @@ function whenOf(m) {
   const f = String(m.field || '').trim();
   return [at, f ? (/^\d+$/.test(f) ? 'Field ' + f : f) : ''].filter(Boolean).join(' · ');
 }
-const whenRow = m => { const w = whenOf(m); return w ? `<div class="mwhen mut"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>${esc(w)}</div>` : '' };
+// Target time, and when the match really started if VEX Events says (matches run late). Green = on time, amber a few minutes late, red well late.
+const lateMin = m => { const a = new Date(m.sched), b = new Date(m.ran); return m.sched && m.ran && !isNaN(a) && !isNaN(b) ? Math.round((b - a) / 60000) : null };
+const lateCls = n => n == null ? '' : n <= 2 ? 'ok' : n < 10 ? 'late' : 'vlate';
+const tOf = t => { const d = new Date(t); return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) };
+// How far behind the schedule the event is running: the delay of the latest match that has started.
+const behindMin = () => { const st = matches().filter(m => m.ran && m.sched).sort((a, b) => (b.order || 0) - (a.order || 0))[0]; const n = st ? lateMin(st) : null; return n != null && n >= 3 ? n : 0 };
+function whenRow(m) {
+  const w = whenOf(m); if (!w) return '';
+  const f = String(m.field || '').trim(), field = f ? (/^\d+$/.test(f) ? 'Field ' + f : f) : '';
+  const n = lateMin(m), ico = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
+  let parts;
+  if (n != null) { // started: target, then the actual start with how late it was
+    const diff = n <= 0 ? 'on time' : '+' + n + ' min';
+    parts = `<span>${esc(w.split(' · ')[0])}</span><span class="wact ${lateCls(n)}">started ${esc(tOf(m.ran))} · ${diff}</span>`;
+  } else {
+    const bh = scored(m) ? 0 : behindMin(), est = bh && m.sched ? tOf(new Date(new Date(m.sched).getTime() + bh * 60000)) : '';
+    parts = `<span>${esc(w.split(' · ')[0])}</span>${est ? `<span class="wact late">expect about ${esc(est)} · running ${bh} min behind</span>` : ''}`;
+  }
+  return `<div class="mwhen mut">${ico}${parts}${field ? `<span>${esc(field)}</span>` : ''}</div>`;
+}
 // Scouting entries: one per scout per team ("general"), plus optionally one per scout per match watched.
 const scoutBase = (t, who) => 's_' + ev + '_' + t + '_' + slug(who);
 const scoutId = (t, who, matchId) => scoutBase(t, who) + (matchId ? '_' + matchId : '');
@@ -101,10 +120,15 @@ const stOf = n => { const d = stDoc(); return d && d.teams && d.teams[n] && !d.t
 const has = v => v != null;
 const sumOf = (a, b) => has(a) || has(b) ? (a || 0) + (b || 0) : null;
 // d = driver, p = programming (autonomous), c = the two added together, a = average of c across the events they've done
+// The event's live skills (from VEX Events, refreshed with the scores) win over the season crawl, which can be hours old.
+const evSkills = () => { const r = S.rankings.find(r => r.eventId === ev); return (r && r.sk) || [] };
+const bestOf = (a, b) => has(a) && has(b) ? Math.max(a, b) : has(a) ? a : has(b) ? b : null;
 function skillOf(n, scope) {
-  const s = stOf(n); if (!s) return null;
-  if (scope === 'event') { const c = s.cur; return c ? { d: c.d, p: c.p, c: sumOf(c.d, c.p), a: null } : null }
-  return { d: s.d, p: s.p, c: sumOf(s.d, s.p), a: sumOf(s.dAvg, s.pAvg) };
+  const s = stOf(n), x = evSkills().find(z => z.team === n), c = x ? { d: x.d, p: x.p } : s && s.cur;
+  if (scope === 'event') return c ? { d: c.d, p: c.p, c: sumOf(c.d, c.p), a: null } : null;
+  if (!s && !c) return null;
+  const d = bestOf(s && s.d, c && c.d), p = bestOf(s && s.p, c && c.p);
+  return { d, p, c: sumOf(d, p), a: s ? sumOf(s.dAvg, s.pAvg) : null };
 }
 function skillRows(scope, by) {
   const rows = teams().map(t => ({ team: t.number, ...(skillOf(t.number, scope) || { d: null, p: null, c: null, a: null }) }));
@@ -726,33 +750,33 @@ function vRank() {
 
 // Skills: highest / average driver and autonomous (programming) scores for every team, like the VEX app.
 function vSkills() {
-  const e = evObj(), d = stDoc();
+  const e = evObj(), d = stDoc(), liveSk = evSkills().length > 0, scp = d ? sks : 'event', off = S.rankings.find(r => r.eventId === ev);
   const upd = e.reid ? `<span class="stmsg mut">${statsBusy ? 'Loading season stats…' : ''}</span>` : '';
   const refresh = e.reid && !spec ? `<button data-act="refstats" ${statsBusy ? 'disabled' : ''}>${d ? 'Refresh' : 'Load season stats'}</button>` : '';
   if (!e.reid) return '<div class="card"><h2>Skills</h2><p class="mut">Skills scores and season records come from VEX Events, so they need an event imported with its event code (Event tab → More → Import).</p></div>';
-  if (!d) return `<div class="card"><h2>Skills</h2><p class="mut">Season stats (skills scores, season record, awards) aren’t loaded yet. They cover each team’s whole season, not only this event, so they work even when no matches are being played. ${spec ? 'A teammate’s Recon loads them.' : 'This takes about a minute.'}</p><div class="foot">${upd}<span class="grow"></span>${refresh}</div></div>`;
-  const rows = skillRows(sks, sko), got = rows.filter(r => r.c != null);
+  if (!d && !liveSk) return `<div class="card"><h2>Skills</h2><p class="mut">Season stats (skills scores, season record, awards) aren’t loaded yet. They cover each team’s whole season, not only this event, so they work even when no matches are being played. ${spec ? 'A teammate’s Recon loads them.' : 'This takes about a minute.'}</p><div class="foot">${upd}<span class="grow"></span>${refresh}</div></div>`;
+  const rows = skillRows(scp, sko), got = rows.filter(r => r.c != null);
   const best = f => got.filter(r => has(r[f])).sort((a, b) => b[f] - a[f])[0];
   const mean = f => { const v = got.map(r => r[f]).filter(has); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null };
   const bc = best('c'), bd = best('d'), bp = best('p');
-  const scopeName = sks === 'event' ? 'at this event' : 'this season';
+  const scopeName = scp === 'event' ? 'at this event' : 'this season';
   const sortName = { c: 'combined', d: 'driver', p: 'autonomous' }[sko];
   return `<div class="card"><h2>Skills</h2>
-  <p class="mut">Combined = driver skills + autonomous (programming) skills. Each team’s best at any event ${sks === 'event' ? 'is replaced by their scores at this event only' : 'this season'}. Teams with no skills run are listed last.</p>
-  ${segBar([['season', 'Season best'], ['event', 'This event']], sks, 'sksope')}
+  <p class="mut">Combined = driver skills + autonomous (programming) skills. Each team’s best at any event ${scp === 'event' ? 'is replaced by their scores at this event only' : 'this season'}. Teams with no skills run are listed last.</p>
+  ${segBar([['season', 'Season best'], ['event', 'This event']], scp, 'sksope')}
   ${got.length ? tiles([
     [bc ? fmt(bc.c) : '–', 'Highest combined', bc ? bc.team : ''],
     [bd ? fmt(bd.d) : '–', 'Highest driver', bd ? bd.team : ''],
     [bp ? fmt(bp.p) : '–', 'Highest auton', bp ? bp.team : ''],
     [fmt(mean('c')), 'Average combined', got.length + ' of ' + rows.length + ' teams'],
     [fmt(mean('d')), 'Average driver', ''], [fmt(mean('p')), 'Average auton', ''],
-  ]) : `<p class="mut">${sks === 'event' ? 'Nobody has a skills run at this event yet.' : 'No skills scores found for these teams this season.'}</p>`}
+  ]) : `<p class="mut">${scp === 'event' ? 'Nobody has a skills run at this event yet.' : 'No skills scores found for these teams this season.'}</p>`}
   ${segBar([['c', 'Sort: Combined'], ['d', 'Sort: Driver'], ['p', 'Sort: Auton']], sko, 'sksort')}
-  <div class="tblwrap"><table class="rk"><thead><tr><th>#</th><th>Team</th><th>Combined</th><th>Driver</th><th>Auton</th>${sks === 'season' ? '<th>Avg</th>' : ''}</tr></thead><tbody>
+  <div class="tblwrap"><table class="rk"><thead><tr><th>#</th><th>Team</th><th>Combined</th><th>Driver</th><th>Auton</th>${scp === 'season' ? '<th>Avg</th>' : ''}</tr></thead><tbody>
   ${rows.map((r, i) => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}"><td>${r[sko] != null ? i + 1 : '–'}</td><td><b>${esc(r.team)}</b></td><td class="${sko === 'c' ? 'hi' : ''}">${fmt(r.c)}</td><td class="${sko === 'd' ? 'hi' : ''}">${fmt(r.d)}</td><td class="${sko === 'p' ? 'hi' : ''}">${fmt(r.p)}</td>${sks === 'season' ? `<td>${fmt(r.a)}</td>` : ''}</tr>`).join('')}
   </tbody></table></div>
-  <p class="mut">Ranked by ${sortName} score ${scopeName}, among the teams at this event. ${sks === 'season' ? 'Avg = average combined score across the events they’ve done skills at. ' : ''}Tap a team for its full season.</p>
-  <div class="foot"><span class="stmsg mut">${statsBusy ? 'Loading season stats…' : 'Updated ' + new Date(d.t).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span><span class="grow"></span>${refresh}</div></div>`;
+  <p class="mut">Ranked by ${sortName} score ${scopeName}, among the teams at this event. ${scp === 'season' ? 'Avg = average combined score across the events they’ve done skills at. ' : ''}Tap a team for its full season.</p>
+  <div class="foot"><span class="stmsg mut">${statsBusy ? 'Loading season stats…' : 'Updated ' + new Date(scp === 'event' && off && off.sk ? off.t : d.t).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span><span class="grow"></span>${refresh}</div></div>`;
 }
 // ---------- event browser: find an event on VEX Events instead of typing its code ----------
 // Results come from the server (/api/events). Typing filters them there (after a short pause); the list is painted
@@ -839,6 +863,12 @@ async function ebLoad(force) {
 function ebKick() { const el = $('#eb'); if (el && !el.closest('details:not([open])') && EB.list === null && !EB.busy && code && !spec) ebLoad() }
 function filt(q) { q = q.toLowerCase(); document.querySelectorAll('#tl2 .trow').forEach(c => c.style.display = c.dataset.q.includes(q) ? '' : 'none') }
 
+// One alliance box: its label, its score (once the match is scored) and the teams. The winning alliance glows; a tie or an unscored match doesn't.
+const winner = m => scored(m) && m.rs !== m.bs ? (m.rs > m.bs ? 'red' : 'blue') : '';
+function sideBox(m, c, label, arr, col, mine) {
+  const sc = scored(m), won = winner(m) === col, score = col === 'red' ? m.rs : m.bs;
+  return `<div class="side ${c} ${mine ? 'mine' : ''} ${won ? 'win' : ''}"><div class="shead"><span>${label}</span>${sc ? `<b class="ascore">${score}${won ? '<i class="sr"> (won)</i>' : ''}</b>` : ''}</div>${chips(m, arr)}</div>`;
+}
 let mnames = ls('mnames') === '1'; // show each team's name under its number on match cards
 const chips = (m, arr) => arr.map(n => { const nm = mnames ? tName(n) : ''; return `<button class="chip ${nm ? 'nm ' : ''}${n === US ? 'me' : cls(m, n)}" data-act="team" data-t="${n}">${n}${nm ? `<small>${esc(nm)}</small>` : ''}</button>` }).join('');
 function vMatches() {
@@ -858,11 +888,9 @@ function vMatches() {
   h += list.map(m => {
     const s = side(m), o = !spec && open[m.id], ps = mf === 'team' ? (m.red.includes(mfT) ? 'red' : 'blue') : s, ours = mf !== 'all' && !!ps; // Our matches: our alliance is always the left column, and the score reads us–them
     const sides = [['r', 'Red alliance', m.red, 'red'], ['b', 'Blue alliance', m.blue, 'blue']]; if (ours && ps === 'blue') sides.reverse();
-    let res = '';
     const rel = mf === 'team' ? `<div class="mrel mut"><b>${esc(mfT)}</b> with ${m[ps].filter(x => x !== mfT).map(esc).join(', ') || '–'} <span aria-hidden="true">·</span> against ${m[ps === 'red' ? 'blue' : 'red'].map(esc).join(', ')}</div>` : '';
-    if (ps && scored(m)) { const a = ps === 'red' ? m.rs : m.bs, b = ps === 'red' ? m.bs : m.rs; res = a > b ? '<span class="res w">W</span>' : a < b ? '<span class="res l">L</span>' : '<span class="res">T</span>' }
-    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" ${spec ? '' : 'data-act="mopen" role="button" aria-expanded="' + !!o + '"'} data-id="${m.id}"><span class="num">${esc(m.label)}</span>${scored(m) ? `<span class="score">${ours && ps === 'blue' ? m.bs + '–' + m.rs : m.rs + '–' + m.bs}</span>` : ''}${res}<span class="grow"></span>${spec ? '' : `<span class="chev ${o ? 'up' : ''}" aria-hidden="true">›</span>`}</div>
-    ${whenRow(m)}${rel}<div class="vs">${sides.map(([c, l, arr, col]) => `<div class="side ${c} ${!ours && s === col ? 'mine' : ''}"><span>${l}</span>${chips(m, arr)}</div>`).join('')}</div>
+    return `<div class="card ${s ? 'us' : ''}"><div class="mhead" ${spec ? '' : 'data-act="mopen" role="button" aria-expanded="' + !!o + '"'} data-id="${m.id}"><span class="num">${esc(m.label)}</span><span class="grow"></span>${spec ? '' : `<span class="chev ${o ? 'up' : ''}" aria-hidden="true">›</span>`}</div>
+    ${whenRow(m)}${rel}<div class="vs">${sides.map(([c, l, arr, col]) => sideBox(m, c, l, arr, col, !ours && s === col)).join('')}</div>
     ${o ? `<div class="mx ${justOpened === m.id ? 'reveal' : ''}">` + (s ? `<h3>Strategy</h3>${noteBox('match', m.id, 'strat', 'Our strategy for this match…')}<h3>Our alliance</h3>${noteBox('match', m.id, 'ally', 'What our partner said / their plan…')}<h3>Opposition</h3>${noteBox('match', m.id, 'opp', 'Weaknesses, tendencies…')}`
         : `<h3>Notes</h3>${noteBox('match', m.id, 'gen', 'What happened in this match…')}`) + `<div class="foot"><button class="d" data-act="clearmatch" data-id="${m.id}">Clear all notes for this match</button><button class="d" data-act="delmatch" data-id="${m.id}">Delete match</button></div></div>` : ''}</div>`
   }).join('') || empty(mf === 'all' ? 'No matches yet.' : mf === 'team' ? (mfT ? 'No matches for ' + mfT + ' yet.' : 'Pick a team to see who they play with and against.') : (spec ? 'No matches for ' + US + ' yet.' : 'No matches with us yet.'));

@@ -129,7 +129,23 @@ async function matchDocs(x, eid, reid, divs) {
   return docs;
 }
 
-// official rankings for every division, one doc per event
+// Live skills for the event: one row per team with its best driver and programming run here (scores and attempts). Unlike the
+// per-team season stats (refreshed every few hours) this is one request and is current as soon as VEX Events has the run.
+async function skillList(x, reid) {
+  const by = new Map();
+  for (const r of await x.all(`/events/${reid}/skills`)) {
+    const team = r.team && (r.team.name || r.team.code);
+    if (!team) continue;
+    const e = by.get(team) || { team, d: null, p: null, da: null, pa: null };
+    const sc = num(r.score), at = num(r.attempts);
+    if (r.type === "driver") { if (e.d == null || sc > e.d) { e.d = sc; e.da = at; } }
+    else if (r.type === "programming") { if (e.p == null || sc > e.p) { e.p = sc; e.pa = at; } }
+    by.set(team, e);
+  }
+  return [...by.values()];
+}
+
+// official rankings for every division, plus the event's live skills, one doc per event
 async function rankDoc(x, eid, reid, divs) {
   const list = [];
   for (const d of divs) {
@@ -138,7 +154,9 @@ async function rankDoc(x, eid, reid, divs) {
       if (team) list.push({ team, div: d, rank: r.rank, w: r.wins, l: r.losses, t: r.ties, wp: r.wp, ap: r.ap, sp: r.sp, high: r.high_score, avg: r.average_points });
     }
   }
-  return ["rankings/" + eid, { eventId: eid, list, t: Date.now() }];
+  let sk = [];
+  try { sk = await skillList(x, reid); } catch (err) { sk = []; }
+  return ["rankings/" + eid, { eventId: eid, list, sk, t: Date.now() }];
 }
 
 // ---------- teams ----------
@@ -591,15 +609,24 @@ export async function onRequest({ request: req, env }) {
           await store.set("_mh_" + eid, { h });
         }
         // Rankings: VEX Events updates them a little after the scores, so after any score change
-        // keep checking them for 3 minutes (only writing when they actually change).
+        // keep checking them for 3 minutes (only writing when they actually change). The event's skills are checked every time
+        // (one request), since a skills run doesn't change any match.
         const rk = (await store.get("_rk_" + eid)) || {};
-        let rkChanged = false;
+        const cur = (await store.get("rankings/" + eid)) || {};
+        let list = cur.list || [], sk = cur.sk || [], rkChanged = false, rh = rk.h;
         if (changed || !rk.h || Date.now() < (rk.until || 0)) {
           const rd = await rankDoc(x, eid, old.reid, old.divs || []);
-          const rh = JSON.stringify(rd[1].list);
-          if (rh !== rk.h) { await store.set(rd[0], rd[1]); rkChanged = true; }
+          rh = JSON.stringify(rd[1].list);
+          if (rh !== rk.h) { list = rd[1].list; rkChanged = true; }
+          if (JSON.stringify(rd[1].sk) !== JSON.stringify(sk)) { sk = rd[1].sk; rkChanged = true; }
           await store.set("_rk_" + eid, { h: rh, until: changed ? Date.now() + 180000 : rk.until || 0 });
+        } else {
+          try {
+            const s2 = await skillList(x, old.reid);
+            if (JSON.stringify(s2) !== JSON.stringify(sk)) { sk = s2; rkChanged = true; }
+          } catch (err) { /* keep the skills we have */ }
         }
+        if (rkChanged) await store.set("rankings/" + eid, { eventId: eid, list, sk, t: Date.now() });
         if (changed || rkChanged) await bump();
         return json({ ok: true, changed: changed || rkChanged, eventId: eid });
       }
@@ -620,7 +647,7 @@ export async function onRequest({ request: req, env }) {
         docs.push([`teams/${eid}_${t.number}`, { eventId: eid, number: t.number, name: t.team_name || "", school: t.organization || "" }]);
       const md = await matchDocs(x, eid, e.id, divs);
       let rd = null;
-      if (x.left() > divs.length) { try { rd = await rankDoc(x, eid, e.id, divs); } catch (err) { rd = null; } }
+      if (x.left() > divs.length + 1) { try { rd = await rankDoc(x, eid, e.id, divs); } catch (err) { rd = null; } }
       await store.setMany(rd ? [...docs, ...md, rd] : [...docs, ...md]);
       await store.set("_mh_" + eid, { h: JSON.stringify(md) });
       await store.set("_rk_" + eid, { h: rd ? JSON.stringify(rd[1].list) : "", until: Date.now() + 180000 });

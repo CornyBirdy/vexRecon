@@ -274,7 +274,7 @@ button.p, .composer.has button { background: var(--accent-fill); }
 .card.us { background: linear-gradient(180deg, color-mix(in oklab, var(--ink) 8%, var(--card)), color-mix(in oklab, var(--ink) 3%, var(--card))); }
 .chip, .chip.gn, .chip.rd, .chip.me, .chip.on { border-color: transparent; background: var(--field); }
 .chip.gn { background: var(--success-soft); color: var(--success); } .chip.rd { background: var(--danger-soft); color: var(--danger); }
-.chip.me { background: var(--a); color: var(--on-accent); } .chip.on { background: var(--a-soft); color: var(--accent-text); }
+.chip.me { background: var(--a-soft); color: var(--accent-text); box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--a) 50%, transparent); } .chip.on { background: var(--a-soft); color: var(--accent-text); }
 .hchip, .res, .mtag { border-color: transparent; }
 .vs .side { background: color-mix(in oklab, var(--ink) 4%, var(--card)); }
 .vs .side.r { background: color-mix(in oklab, var(--alliance-red, var(--red)) 20%, var(--card)); } .vs .side.b { background: color-mix(in oklab, var(--alliance-blue, var(--blue)) 20%, var(--card)); }
@@ -333,3 +333,18 @@ html, body, #app { overflow-anchor: none; }
 
 /* the tab bar gets its own compositing layer, pinned to the bottom of the screen, so iPhone Safari can't slide it with the page */
 nav { transform: translate3d(0, 0, 0); -webkit-transform: translate3d(0, 0, 0); will-change: transform; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+
+/* match cards: score inside each alliance box, winner glows */
+.vs .shead{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s-2)}
+.vs .shead>span{font-size:12px;font-weight:700;color:var(--ink-muted)}
+.vs .side.mine .shead>span,.vs .side.win .shead>span{color:var(--ink)}
+.ascore{font:600 22px/1 var(--mono);font-variant-numeric:tabular-nums;color:var(--ink-muted)}
+.vs .win .ascore{color:var(--ink);font-weight:700}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.vs .side.win.r{background:linear-gradient(155deg,color-mix(in oklab,var(--alliance-red) var(--win-a),var(--card)),color-mix(in oklab,var(--alliance-red) var(--win-b),var(--card)));box-shadow:inset 0 4px 0 var(--alliance-red),0 0 0 1px color-mix(in oklab,var(--alliance-red) 55%,transparent),0 0 22px -2px color-mix(in oklab,var(--alliance-red) var(--win-glow),transparent)}
+.vs .side.win.b{background:linear-gradient(155deg,color-mix(in oklab,var(--alliance-blue) var(--win-a),var(--card)),color-mix(in oklab,var(--alliance-blue) var(--win-b),var(--card)));box-shadow:inset 0 4px 0 var(--alliance-blue),0 0 0 1px color-mix(in oklab,var(--alliance-blue) 55%,transparent),0 0 22px -2px color-mix(in oklab,var(--alliance-blue) var(--win-glow),transparent)}
+/* target vs actual match time */
+.mwhen{flex-wrap:wrap}
+.mwhen span+span::before{content:"·";margin-right:6px}
+.mwhen .wact.ok{color:var(--success)}.mwhen .wact.late{color:var(--warning)}.mwhen .wact.vlate{color:var(--danger)}
+.mwhen .wact{font-weight:600}
