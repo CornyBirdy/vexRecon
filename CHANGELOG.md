@@ -6,6 +6,8 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-16: Scores and match times fixed
+
 ### Fixed
 - **Scores now show, and "Next match" is right.** Some events (this one included) never tick VEX Events' "scored" flag even though the scores are there, so Recon hid every score and kept saying an old match was next. A match now counts as played when it has started and has points, so scores, W/L, rank, OPR and the Next match card all update as the matches finish.
 - **Match times are right again.** VEX Events gives each time with a US time-zone label even for events elsewhere (Q1 at an Adelaide event arrives as "18:30" with a US offset, which is really 10:00 am local). Times are now converted to your device's own time zone, so they match the VEX Events app.
