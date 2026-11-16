@@ -6,6 +6,14 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+### Added
+- **Skills show how many runs each team did.** Under each driver and autonomous score on the Skills tab (This event) it says "2 runs", and a line under the table gives the totals so far, like the VEX Events app.
+- **Tap a match on a team's page to see it in the match list.** The match chips on a team's page now open Matches → By team with that team already picked, scrolled to the match you tapped.
+
+### Changed
+- **The winning alliance no longer glows.** Instead its box fades in its colour from the outer edge (left or right), so the teams and scores stay easy to read, and the winner's score is bigger than the loser's.
+- **Match times sit on two lines.** The scheduled time and field are on the first line; the second line says when the match started and how late (green, amber or red), or when to expect it if the event is running behind. Long lines no longer wrap awkwardly.
+
 ## [1.3.0] - 2026-11-16: Live skills, match delays, winner glow
 
 ### Added

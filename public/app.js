@@ -54,15 +54,10 @@ function whenRow(m) {
   const w = whenOf(m); if (!w) return '';
   const f = String(m.field || '').trim(), field = f ? (/^\d+$/.test(f) ? 'Field ' + f : f) : '';
   const n = lateMin(m), ico = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
-  let parts;
-  if (n != null) { // started: target, then the actual start with how late it was
-    const diff = n <= 0 ? 'on time' : '+' + n + ' min';
-    parts = `<span>${esc(w.split(' · ')[0])}</span><span class="wact ${lateCls(n)}">started ${esc(tOf(m.ran))} · ${diff}</span>`;
-  } else {
-    const bh = scored(m) ? 0 : behindMin(), est = bh && m.sched ? tOf(new Date(new Date(m.sched).getTime() + bh * 60000)) : '';
-    parts = `<span>${esc(w.split(' · ')[0])}</span>${est ? `<span class="wact late">expect about ${esc(est)} · running ${bh} min behind</span>` : ''}`;
-  }
-  return `<div class="mwhen mut">${ico}${parts}${field ? `<span>${esc(field)}</span>` : ''}</div>`;
+  let stat = '';
+  if (n != null) stat = `<span class="wact ${lateCls(n)}">Started ${esc(tOf(m.ran))} · ${n <= 0 ? 'on time' : '+' + n + ' min'}</span>`; // started: how late it really was
+  else { const bh = scored(m) ? 0 : behindMin(); if (bh && m.sched) stat = `<span class="wact late">Expect about ${esc(tOf(new Date(new Date(m.sched).getTime() + bh * 60000)))} · ${bh} min behind</span>` }
+  return `<div class="mwhen mut">${ico}<span>${esc([w.split(' · ')[0], field].filter(Boolean).join(' · '))}</span></div>${stat ? `<div class="mwstat">${stat}</div>` : ''}`;
 }
 // Scouting entries: one per scout per team ("general"), plus optionally one per scout per match watched.
 const scoutBase = (t, who) => 's_' + ev + '_' + t + '_' + slug(who);
@@ -122,10 +117,11 @@ const sumOf = (a, b) => has(a) || has(b) ? (a || 0) + (b || 0) : null;
 // d = driver, p = programming (autonomous), c = the two added together, a = average of c across the events they've done
 // The event's live skills (from VEX Events, refreshed with the scores) win over the season crawl, which can be hours old.
 const evSkills = () => { const r = S.rankings.find(r => r.eventId === ev); return (r && r.sk) || [] };
+const runsOf = n => has(n) ? `<small class="runs">${n} ${n === 1 ? 'run' : 'runs'}</small>` : '';
 const bestOf = (a, b) => has(a) && has(b) ? Math.max(a, b) : has(a) ? a : has(b) ? b : null;
 function skillOf(n, scope) {
-  const s = stOf(n), x = evSkills().find(z => z.team === n), c = x ? { d: x.d, p: x.p } : s && s.cur;
-  if (scope === 'event') return c ? { d: c.d, p: c.p, c: sumOf(c.d, c.p), a: null } : null;
+  const s = stOf(n), x = evSkills().find(z => z.team === n), c = x ? { d: x.d, p: x.p, da: x.da, pa: x.pa } : s && s.cur;
+  if (scope === 'event') return c ? { d: c.d, p: c.p, da: c.da, pa: c.pa, c: sumOf(c.d, c.p), a: null } : null;
   if (!s && !c) return null;
   const d = bestOf(s && s.d, c && c.d), p = bestOf(s && s.p, c && c.p);
   return { d, p, c: sumOf(d, p), a: s ? sumOf(s.dAvg, s.pAvg) : null };
@@ -778,8 +774,9 @@ function vSkills() {
   ]) : `<p class="mut">${scp === 'event' ? 'Nobody has a skills run at this event yet.' : 'No skills scores found for these teams this season.'}</p>`}
   ${segBar([['c', 'Sort: Combined'], ['d', 'Sort: Driver'], ['p', 'Sort: Auton']], sko, 'sksort')}
   <div class="tblwrap"><table class="rk"><thead><tr><th>#</th><th>Team</th><th>Combined</th><th>Driver</th><th>Auton</th>${scp === 'season' ? '<th>Avg</th>' : ''}</tr></thead><tbody>
-  ${rows.map((r, i) => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}"><td>${r[sko] != null ? i + 1 : '–'}</td><td><b>${esc(r.team)}</b></td><td class="${sko === 'c' ? 'hi' : ''}">${fmt(r.c)}</td><td class="${sko === 'd' ? 'hi' : ''}">${fmt(r.d)}</td><td class="${sko === 'p' ? 'hi' : ''}">${fmt(r.p)}</td>${sks === 'season' ? `<td>${fmt(r.a)}</td>` : ''}</tr>`).join('')}
+  ${rows.map((r, i) => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}"><td>${r[sko] != null ? i + 1 : '–'}</td><td><b>${esc(r.team)}</b></td><td class="${sko === 'c' ? 'hi' : ''}">${fmt(r.c)}</td><td class="${sko === 'd' ? 'hi' : ''}">${fmt(r.d)}${runsOf(r.da)}</td><td class="${sko === 'p' ? 'hi' : ''}">${fmt(r.p)}${runsOf(r.pa)}</td>${scp === 'season' ? `<td>${fmt(r.a)}</td>` : ''}</tr>`).join('')}
   </tbody></table></div>
+  ${scp === 'event' && rows.some(r => has(r.da) || has(r.pa)) ? `<p class="mut">Runs so far: <b>${rows.reduce((n, r) => n + (r.da || 0), 0)}</b> driver, <b>${rows.reduce((n, r) => n + (r.pa || 0), 0)}</b> autonomous, as VEX Events counts them.</p>` : ''}
   <p class="mut">Ranked by ${sortName} score ${scopeName}, among the teams at this event. ${scp === 'season' ? 'Avg = average combined score across the events they’ve done skills at. ' : ''}Tap a team for its full season.</p>
   <div class="foot"><span class="stmsg mut">${statsBusy ? 'Loading season stats…' : 'Updated ' + new Date(scp === 'event' && off && off.sk ? off.t : d.t).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span><span class="grow"></span>${refresh}</div></div>`;
 }
@@ -1121,7 +1118,7 @@ function vTeam(num) {
     const t = teams().find(x => x.number === num) || { number: num, name: '', school: '' }, st = stats(), r = st.by.get(num), ms = matches().filter(m => m.red.includes(num) || m.blue.includes(num));
     return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) +
       (r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '') + seasonCard(num) +
-      `<div class="card"><h2>Matches</h2>${ms.map(m => `<span class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}">${esc(m.label)}</span>`).join('') || '<span class="mut">None</span>'}</div>`;
+      `<div class="card"><h2>Matches</h2>${ms.map(m => `<button class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}" data-act="mteam" data-t="${esc(num)}" data-id="${esc(m.id)}" aria-label="Show ${esc(m.label)} in ${esc(num)}’s matches">${esc(m.label)}</button>`).join('') || '<span class="mut">None</span>'}</div>`;
   }
   if (num === US) return head(`<span class="num">${esc(num)}</span> ${esc(tName(num) || 'Us')}`) + `<div class="card">That’s us. Scouting and team notes are turned off for our own team.</div>` + seasonCard(num);
   const t = teams().find(x => x.number === num) || { number: num, name: '', school: '' };
@@ -1133,7 +1130,7 @@ function vTeam(num) {
   ${photosCard(num)}
   ${seasonCard(num)}
   <div class="card"><h2>Scouting averages</h2><p class="mut">From ${sc.length} ${sc.length === 1 ? 'entry' : 'entries'}. Ratings are out of 5.</p>${sc.length ? tiles([[avg('autoPts'), 'Auto points'], [avg('driver'), 'Driver skill'], [avg('speed'), 'Speed'], [avg('scoring'), 'Scoring'], [avg('scoreSpeed'), 'Scoring speed'], [(c => c === '-' ? c : c + ' s')(avg('cycleTime')), 'Cycle time'], [avg('durability'), 'Durability'], [avg('overall'), 'Overall'], [(v => v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-')(sc.map(x => suggest(x)).filter(Boolean).map(g => g.avg)), 'Suggested overall', 'average of the ratings']]) : ''}</div>
-  <div class="card"><h2>Matches</h2>${ms.map(m => `<span class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}">${esc(m.label)}</span>`).join('') || '<span class="mut">None</span>'}</div>
+  <div class="card"><h2>Matches</h2>${ms.map(m => `<button class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}" data-act="mteam" data-t="${esc(num)}" data-id="${esc(m.id)}" aria-label="Show ${esc(m.label)} in ${esc(num)}’s matches">${esc(m.label)}</button>`).join('') || '<span class="mut">None</span>'}</div>
   <div class="card"><h2>Scouting entries</h2>${sc.map(s => sum(s)).join('') || '<span class="mut">None yet</span>'}${notes('team', num).length ? `<h3>Older quick notes</h3>${notes('team', num).map(noteRow).join('')}` : ''}<div class="foot">${sc.length ? `<button class="d" data-act="clearscout" data-t="${num}">Clear all scouting entries</button>` : ''}${notes('team', num).length ? `<button class="d" data-act="clearnotes" data-t="${num}">Clear older quick notes</button>` : ''}</div></div>
   <div class="card"><h2>Alliance requests</h2>${notes('req', num).map(n => `<div class="note">${esc(n.text)}</div>`).join('') || '<span class="mut">None</span>'}</div>
   ${t.id ? `<div class="foot"><button class="d" data-act="delteam" data-id="${t.id}">Remove team from this event</button></div>` : ''}`;
@@ -1378,6 +1375,10 @@ document.addEventListener('click', e => {
   else if (a === 'sfilter') { sf = b.dataset.v; ls('sf', sf); navAnim = 'seg'; render() }
   else if (a === 'mfilter') { mf = b.dataset.v; ls('mf', mf); navAnim = 'seg'; render() }
   else if (a === 'gorank') { tab = 'event'; ls('tab', tab); tv = 'rank'; ls('tv', tv); navAnim = 'fwd'; render(); const r = document.querySelector('#app tr.us'); if (r) setTimeout(() => { r.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); flash(r) }, 120) }
+  else if (a === 'mteam') { // a match chip on a team's page: open Matches > By team with that team picked, scrolled to that match
+    const t = b.dataset.t, id = b.dataset.id; mTeam = null; tab = 'matches'; ls('tab', tab); mf = 'team'; ls('mf', mf); mfT = t; ls('mft', mfT); navAnim = 'fwd'; render();
+    const c = document.querySelector(`#app .mhead[data-id="${id}"]`)?.closest('.card'); if (c) setTimeout(() => { c.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); flash(c) }, 150);
+  }
   else if (a === 'gomatch') { const id = b.dataset.id; tab = 'matches'; ls('tab', tab); mf = 'ours'; ls('mf', mf); open[id] = true; justOpened = id; navAnim = 'fwd'; render(); const c = document.querySelector(`#app .mhead[data-id="${id}"]`); if (c) setTimeout(() => { c.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); flash(c.closest('.card')) }, 120) }
   else if (a === 'tview') { tv = b.dataset.v; ls('tv', tv); navAnim = 'seg'; render() }
   else if (a === 'rksort') { rks = b.dataset.v; ls('rks', rks); render() }

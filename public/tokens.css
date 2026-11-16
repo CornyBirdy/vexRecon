@@ -225,10 +225,10 @@
 :root { --mine-a: 26%; --accent-2: #a6ece5; --accent-3: #2a9d93; }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --mine-a: 17%; --accent-2: #2a9d93; --accent-3: #7fcfc7; } }
 :root[data-theme="light"] { --mine-a: 17%; --accent-2: #2a9d93; --accent-3: #7fcfc7; }
-/* the winning alliance's glow on a match card: how strongly the alliance colour fills it (top, bottom) and how far it glows */
-:root { --win-a: 46%; --win-b: 18%; --win-glow: 45%; }
-@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --win-a: 28%; --win-b: 10%; --win-glow: 40%; } }
-:root[data-theme="light"] { --win-a: 28%; --win-b: 10%; --win-glow: 40%; }
+/* the winning alliance's box on a match card: how strong its colour is at the outer edge before it fades out */
+:root { --win-a: 48%; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --win-a: 38%; } }
+:root[data-theme="light"] { --win-a: 38%; }
 
 /* ---- VEX alliance colours: set by the game, so they never change with the accent.
    Same hues as danger / info so they sit with the suite, but kept separate because they mean "red/blue alliance",
