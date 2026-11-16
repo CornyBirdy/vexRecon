@@ -124,7 +124,7 @@ table.rk{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric
 .rk th:nth-child(2),.rk td:nth-child(2){text-align:left}.rk th:first-child,.rk td:first-child{text-align:left;color:var(--ink-muted)}
 .rk tbody tr{cursor:pointer}.rk tbody tr:hover td{background:var(--surface-raised)}
 .rk tr.us td{background:var(--accent-soft)}.rk tr.us td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
-@media(max-width:520px){.rk .wide{display:none}}
+@media(max-width:520px){.rk .wide{display:none}table.rk.rkr{font-size:13.5px}.rkr th,.rkr td{padding-left:3px;padding-right:3px}}
 
 /* calmer layout bits */
 .empty{text-align:center;padding:var(--s-6) var(--s-4)}

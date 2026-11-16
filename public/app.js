@@ -749,10 +749,10 @@ function vRank() {
   rows.sort(key);
   return `<div class="card"><h2>Rankings</h2><p class="mut">${st.official ? 'Official rankings from VEX Events.' : 'Calculated from qualification scores (win points, then OPR). Official rankings replace these once VEX Events has them.'} OPR uses ${st.n} scored qualification ${st.n === 1 ? 'match' : 'matches'}.</p>
   ${segBar([['rank', 'Rank'], ['opr', 'OPR'], ['ccwm', 'CCWM'], ['avg', 'Avg score']].map(([k, l]) => [k, 'Sort: ' + l]), rks, 'rksort')}
-  <div class="tblwrap"><table class="rk"><thead><tr><th>#</th><th>Team</th><th>W-L-T</th><th>WP</th><th class="wide">AP</th><th class="wide">SP</th><th>Avg</th><th class="wide">High</th><th>OPR</th><th class="wide">DPR</th><th>CCWM</th></tr></thead><tbody>
-  ${rows.map(r => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}"><td>${st.multiDiv ? 'D' + r.div + '·' : ''}${r.rank ?? '–'}</td><td><b>${esc(r.team)}</b></td><td>${rec(r)}</td><td>${r.wp ?? '–'}</td><td class="wide">${r.ap ?? '–'}</td><td class="wide">${r.sp ?? '–'}</td><td>${f1(r.avg)}</td><td class="wide">${r.high ?? '–'}</td><td>${f1(r.opr)}</td><td class="wide">${f1(r.dpr)}</td><td>${sgn(r.ccwm)}</td></tr>`).join('')}
+  <div class="tblwrap"><table class="rk rkr"><thead><tr><th>#</th><th>Team</th><th>W-L-T</th><th title="Win points">WP</th><th title="Autonomous points">AP</th><th title="Strength of schedule points">SP</th><th class="wide">Avg</th><th class="wide">High</th><th>OPR</th><th class="wide">DPR</th><th>CCWM</th></tr></thead><tbody>
+  ${rows.map(r => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}"><td>${st.multiDiv ? 'D' + r.div + '·' : ''}${r.rank ?? '–'}</td><td><b>${esc(r.team)}</b></td><td>${rec(r)}</td><td>${r.wp ?? '–'}</td><td>${r.ap ?? '–'}</td><td>${r.sp ?? '–'}</td><td class="wide">${f1(r.avg)}</td><td class="wide">${r.high ?? '–'}</td><td>${f1(r.opr)}</td><td class="wide">${f1(r.dpr)}</td><td>${sgn(r.ccwm)}</td></tr>`).join('')}
   </tbody></table></div>
-  <p class="mut">Avg = average points per match. OPR ≈ points a team adds to its alliance. DPR ≈ points the other alliance scores against it. CCWM = OPR − DPR, its effect on the winning margin. Tap a team for details.</p></div>`;
+  <p class="mut"><b>WP</b> = win points (2 for a win, 1 for a tie). <b>AP</b> = autonomous points, the first tiebreaker when WP is level. <b>SP</b> = strength of schedule points, the next tiebreaker: the losing alliance’s score in each of the team’s matches, added up, so a higher SP means a tougher schedule. ${st.official ? '' : 'AP and SP only show once VEX Events has official rankings. '}Avg = average points per match. OPR ≈ points a team adds to its alliance. DPR ≈ points the other alliance scores against it. CCWM = OPR − DPR, its effect on the winning margin. Tap a team for details.</p></div>`;
 }
 
 // Skills: highest / average driver and autonomous (programming) scores for every team, like the VEX app.
@@ -1124,7 +1124,7 @@ function vTeam(num) {
   if (spec) { // spectators get the public side only: rank, season stats and matches. No scouting, notes or picklist.
     const t = teams().find(x => x.number === num) || { number: num, name: '', school: '' }, st = stats(), r = st.by.get(num), ms = matches().filter(m => m.red.includes(num) || m.blue.includes(num));
     return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) +
-      (r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '') + seasonCard(num) +
+      (r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}${r.ap != null ? ` · AP ${r.ap}` : ''}${r.sp != null ? ` · SP ${r.sp}` : ''}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '') + seasonCard(num) +
       `<div class="card"><h2>Matches</h2>${ms.map(m => `<button class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}" data-act="mteam" data-t="${esc(num)}" data-id="${esc(m.id)}" aria-label="Show ${esc(m.label)} in ${esc(num)}’s matches">${esc(m.label)}</button>`).join('') || '<span class="mut">None</span>'}</div>`;
   }
   if (num === US) return head(`<span class="num">${esc(num)}</span> ${esc(tName(num) || 'Us')}`) + `<div class="card">That’s us. Scouting and team notes are turned off for our own team.</div>` + seasonCard(num);
@@ -1133,7 +1133,7 @@ function vTeam(num) {
   const sc = notes('scout', num);
   const avg = f => { const v = sc.map(s => parseFloat(s[f])).filter(x => x > 0); return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-' };
   return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) + `<button class="p wide" data-act="scoutfrom" data-t="${esc(num)}">Scout this team</button>
-  ${(() => { const st = stats(), r = st.by.get(num); return r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '' })()}
+  ${(() => { const st = stats(), r = st.by.get(num); return r ? `<div class="card"><b>${st.official ? 'Rank' : 'Calculated rank'} ${r.rank ?? '–'}</b> · ${rec(r)} · WP ${r.wp ?? '–'}${r.ap != null ? ` · AP ${r.ap}` : ''}${r.sp != null ? ` · SP ${r.sp}` : ''}<div class="mut">OPR ${f1(r.opr)} · DPR ${f1(r.dpr)} · CCWM ${sgn(r.ccwm)}</div></div>` : '' })()}
   ${photosCard(num)}
   ${seasonCard(num)}
   <div class="card"><h2>Scouting averages</h2><p class="mut">From ${sc.length} ${sc.length === 1 ? 'entry' : 'entries'}. Ratings are out of 5.</p>${sc.length ? tiles([[avg('autoPts'), 'Auto points'], [avg('driver'), 'Driver skill'], [avg('speed'), 'Speed'], [avg('scoring'), 'Scoring'], [avg('scoreSpeed'), 'Scoring speed'], [(c => c === '-' ? c : c + ' s')(avg('cycleTime')), 'Cycle time'], [avg('durability'), 'Durability'], [avg('overall'), 'Overall'], [(v => v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-')(sc.map(x => suggest(x)).filter(Boolean).map(g => g.avg)), 'Suggested overall', 'average of the ratings']]) : ''}</div>

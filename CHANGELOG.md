@@ -6,6 +6,9 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+### Added
+- **AP and SP on the Rankings tab and each team's page.** **AP** is autonomous points and **SP** is strength of schedule points, the two tiebreakers after win points (WP). They were already loaded but hidden on phones; they now show in the Rankings table (the Avg column moved off phone screens to make room, and still shows on wider screens) and in the rank line on a team's page ("Rank 3 · 2-0-0 · WP 4 · AP 18 · SP 72"). A short note under the table explains what WP, AP and SP mean. They only show once VEX Events has official rankings.
+
 ## [1.4.0] - 2026-11-16: Skills runs, jump to matches, animated team names
 
 ### Added
