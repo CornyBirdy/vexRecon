@@ -753,23 +753,22 @@ function vTeamList() {
   ${spec ? '' : `<details class="card" id="d-addteam" ${det('d-addteam', !ts.length)}><summary><h2>Add a team manually</h2></summary><div class="row"><input id="t_n" placeholder="Number e.g. 52111A" aria-label="Team number"><input id="t_name" placeholder="Team name" aria-label="Team name"><input id="t_s" placeholder="School" aria-label="School"><button class="p" data-act="addteam">Add</button></div></details>`}`;
 }
 
-let rkadv = ls('rkadv') === '1'; // Rankings: false = the ranking itself (W-L-T, WP, AP, SP); true = the advanced stats (OPR, DPR, CCWM, average, high)
+// Rankings, laid out like the VEX Events app: one card per team (number and name; rank and record; then WP / AP / SP and OPR / DPR / CCWM),
+// with Rank / OPR / DPR / CCWM along the top to choose how the list is sorted. A lower DPR is better, so DPR sorts the other way.
 function vRank() {
   const st = stats(), rows = [...st.by.entries()].map(([team, r]) => ({ ...r, team }));
   if (!rows.length) return '<div class="card"><h2>Rankings</h2><p class="mut">No qualification matches have been scored yet. Rankings and OPR show up here once they are.</p></div>';
-  const sortK = rkadv ? rks : 'rank';
-  const key = { rank: (a, b) => (a.div || 0) - (b.div || 0) || a.rank - b.rank, opr: (a, b) => (b.opr ?? -1e9) - (a.opr ?? -1e9), ccwm: (a, b) => (b.ccwm ?? -1e9) - (a.ccwm ?? -1e9), avg: (a, b) => (b.avg ?? -1e9) - (a.avg ?? -1e9) }[sortK] || (() => 0);
-  rows.sort(key);
-  const cell = r => `<td>${st.multiDiv ? 'D' + r.div + '·' : ''}${r.rank ?? '–'}</td><td><b>${esc(r.team)}</b></td>`;
-  const table = rkadv
-    ? `<thead><tr><th>#</th><th>Team</th><th>OPR</th><th>DPR</th><th>CCWM</th><th>Avg</th><th>High</th></tr></thead><tbody>${rows.map(r => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}">${cell(r)}<td class="${rks === 'opr' ? 'hi' : ''}">${f1(r.opr)}</td><td>${f1(r.dpr)}</td><td class="${rks === 'ccwm' ? 'hi' : ''}">${sgn(r.ccwm)}</td><td class="${rks === 'avg' ? 'hi' : ''}">${f1(r.avg)}</td><td>${r.high ?? '–'}</td></tr>`).join('')}</tbody>`
-    : `<thead><tr><th>#</th><th>Team</th><th>W-L-T</th><th title="Win points">WP</th><th title="Autonomous points">AP</th><th title="Strength of schedule points">SP</th></tr></thead><tbody>${rows.map(r => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}">${cell(r)}<td>${rec(r)}</td><td>${r.wp ?? '–'}</td><td>${r.ap ?? '–'}</td><td>${r.sp ?? '–'}</td></tr>`).join('')}</tbody>`;
-  return `<div class="card"><h2>Rankings</h2><p class="mut">${st.official ? 'Official rankings from VEX Events.' : 'Calculated from qualification scores (win points, then OPR). Official rankings replace these once VEX Events has them.'}</p>
-  <div class="mtools rktools">${rkadv ? segBar([['rank', 'Rank'], ['opr', 'OPR'], ['ccwm', 'CCWM'], ['avg', 'Avg']], rks, 'rksort') : ''}<button class="chip ${rkadv ? 'on' : ''}" data-act="rkadv" aria-pressed="${rkadv}">Advanced stats</button></div>
-  <div class="tblwrap"><table class="rk rkr">${table}</table></div>
-  ${rkadv
-    ? `<p class="mut">OPR ${st.n ? `uses ${st.n} scored qualification ${st.n === 1 ? 'match' : 'matches'}. ` : ''}OPR ≈ points a team adds to its alliance. DPR ≈ points the other alliance scores against it. CCWM = OPR − DPR, its effect on the winning margin. Avg = average points per match; High = best match score. Tap a team for details.</p>`
-    : `<p class="mut"><b>WP</b> = win points (2 for a win, 1 for a tie). <b>AP</b> = autonomous points, the first tiebreaker when WP is level. <b>SP</b> = strength of schedule points, the next tiebreaker: the losing alliance’s score in each of the team’s matches, added up, so a higher SP means a tougher schedule. ${st.official ? '' : 'AP and SP only show once VEX Events has official rankings. '}Tap <b>Advanced stats</b> for OPR, DPR, CCWM and scores.</p>`}</div>`;
+  const by = ['rank', 'opr', 'dpr', 'ccwm'].includes(rks) ? rks : 'rank';
+  const cmp = { rank: (a, b) => (a.div || 0) - (b.div || 0) || a.rank - b.rank, opr: (a, b) => (b.opr ?? -1e9) - (a.opr ?? -1e9), dpr: (a, b) => (a.dpr ?? 1e9) - (b.dpr ?? 1e9), ccwm: (a, b) => (b.ccwm ?? -1e9) - (a.ccwm ?? -1e9) }[by];
+  rows.sort(cmp);
+  const stat = (v, l) => `<span><b>${v}</b> ${l}</span>`;
+  return `<div class="card rkcard"><h2>Rankings</h2><p class="mut">${st.official ? 'Official rankings from VEX Events.' : 'Calculated from qualification scores (win points, then OPR). Official rankings replace these once VEX Events has them.'} Sort by:</p>
+  ${segBar([['rank', 'Rank'], ['opr', 'OPR'], ['dpr', 'DPR'], ['ccwm', 'CCWM']], by, 'rksort')}
+  <div class="rklist">${rows.map(r => `<div class="rkrow ${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}" role="button" tabindex="0">
+    <div class="rkname"><b class="num">${esc(r.team)}</b><span>${esc(tName(r.team))}</span></div>
+    <div class="rkrank"><b>${st.multiDiv ? 'D' + r.div + '·' : ''}${r.rank ?? '–'}</b><small>(${rec(r)})</small></div>
+    <div class="rkstats">${stat(r.wp ?? '–', 'WP')}${stat(r.ap ?? '–', 'AP')}${stat(r.sp ?? '–', 'SP')}${stat(f1(r.opr), 'OPR')}${stat(f1(r.dpr), 'DPR')}${stat(sgn(r.ccwm), 'CCWM')}</div></div>`).join('')}</div>
+  <p class="mut"><b>WP</b> win points (2 for a win, 1 for a tie). <b>AP</b> autonomous points, the first tiebreaker. <b>SP</b> strength of schedule points, the next tiebreaker: the losing alliance’s score in each of the team’s matches, added up. ${st.official ? '' : 'AP and SP only show once VEX Events has official rankings. '}<b>OPR</b> ≈ points a team adds to its alliance, <b>DPR</b> ≈ points the other alliance scores against it (lower is better), <b>CCWM</b> = OPR − DPR. Average and high score are on each team’s page.</p></div>`;
 }
 
 // Skills: highest / average driver and autonomous (programming) scores for every team, like the VEX app.
@@ -1418,7 +1417,6 @@ document.addEventListener('click', e => {
   else if (a === 'import') doImport(v('sku'), sayIn('impmsg'));
   else if (a === 'reimport') { if (spec) { const s = skuOf(evObj()), say = sayIn('impmsg2'); say('Checking…'); api('/import', { sku: s, light: true }).then(() => pull()).then(() => say('')).catch(e => say('Couldn’t check: ' + String(e.message || e).slice(0, 100))) } else doImport(skuOf(evObj()), sayIn('impmsg2')) }
   else if (a === 'team') { mTeam = b.dataset.t; render() }
-  else if (a === 'rkadv') { rkadv = !rkadv; ls('rkadv', rkadv ? '1' : '0'); render() }
   else if (a === 'mnames') { mnames = !mnames; ls('mnames', mnames ? '1' : '0'); document.body.classList.toggle('mnames', mnames); b.classList.toggle('on', mnames); b.setAttribute('aria-pressed', mnames) } // no re-render, so the names can animate open
   else if (a === 'agedit') { agEdit = !agEdit; render() }
   else if (a === 'agadd') {
@@ -1463,7 +1461,7 @@ document.addEventListener('click', e => {
   else if (a === 'gorank') { tab = 'event'; ls('tab', tab); tv = 'rank'; ls('tv', tv); navAnim = 'fwd'; render(); const r = document.querySelector('#app tr.us'); if (r) setTimeout(() => { r.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); flash(r) }, 120) }
   else if (a === 'goteamrank') { // the Rank tile on a team's page: open Rankings and scroll to that team's row
     const t = b.dataset.t, already = tab === 'event' && tv === 'rank'; mTeam = null; tab = 'event'; ls('tab', tab); tv = 'rank'; ls('tv', tv); navAnim = 'fwd'; render();
-    const r = [...document.querySelectorAll('#app tr[data-t]')].find(x => x.dataset.t === t); if (r) setTimeout(() => { r.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); flash(r) }, already ? SLIDE_MS + 150 : 150) // already here: wait for the scroll-keeping redraw to finish;
+    const r = [...document.querySelectorAll('#app .rkrow[data-t]')].find(x => x.dataset.t === t); if (r) setTimeout(() => { r.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); flash(r) }, already ? SLIDE_MS + 150 : 150) // already here: wait for the scroll-keeping redraw to finish;
   }
   else if (a === 'mteam') { // a match chip on a team's page: open Matches > By team with that team picked, scrolled to that match
     const t = b.dataset.t, id = b.dataset.id, already = tab === 'matches' && mf === 'team' && mfT === t; mTeam = null; tab = 'matches'; ls('tab', tab); mf = 'team'; ls('mf', mf); mfT = t; ls('mft', mfT); navAnim = 'fwd'; render();

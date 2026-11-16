@@ -331,18 +331,15 @@ html, body, #app { overflow-anchor: none; }
 /* the tab bar gets its own compositing layer, pinned to the bottom of the screen, so iPhone Safari can't slide it with the page */
 nav { transform: translate3d(0, 0, 0); -webkit-transform: translate3d(0, 0, 0); will-change: transform; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 
-/* match cards: score inside each alliance box; the winner's box fades in its colour up from the bottom and its score is bigger */
+/* match cards: score inside each alliance box; the winner's box is a stronger solid colour and its score is bigger */
 .vs .shead{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s-2)}
 .vs .shead>span{font-size:12px;font-weight:700;color:var(--ink-muted)}
 .vs .side.mine .shead>span,.vs .side.win .shead>span{color:var(--ink)}
 .ascore{font:600 20px/1 var(--mono);font-variant-numeric:tabular-nums;color:var(--ink-muted)}
 .vs .win .ascore{font-size:32px;font-weight:700;color:var(--ink)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.vs .side.win.r{--wbase:color-mix(in oklab,var(--alliance-red) 20%,var(--card));--wedge:color-mix(in oklab,var(--alliance-red) var(--win-a),var(--card))}
-.vs .side.win.b{--wbase:color-mix(in oklab,var(--alliance-blue) 20%,var(--card));--wedge:color-mix(in oklab,var(--alliance-blue) var(--win-a),var(--card))}
-.vs .side.win.mine.r{--wbase:color-mix(in oklab,var(--alliance-red) 36%,var(--card))}
-.vs .side.win.mine.b{--wbase:color-mix(in oklab,var(--alliance-blue) 36%,var(--card))}
-.vs .side.win.r,.vs .side.win.b{background:linear-gradient(0deg,var(--wedge) 0,var(--wbase) 62%)}
+.vs .side.win.r{background:color-mix(in oklab,var(--alliance-red) var(--win-a),var(--card))}
+.vs .side.win.b{background:color-mix(in oklab,var(--alliance-blue) var(--win-a),var(--card))}
 /* target vs actual match time */
 .wact{font-weight:600}.wact.ok{color:var(--success)}.wact.late{color:var(--warning)}.wact.vlate{color:var(--danger)}
 
@@ -364,7 +361,6 @@ nav { transform: translate3d(0, 0, 0); -webkit-transform: translate3d(0, 0, 0); 
 .mi.wact{font-weight:600}
 /* both alliance boxes keep the same header height, so the teams line up across the two boxes whoever won */
 .vs .shead{min-height:34px;align-items:center}
-.rktools{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:var(--s-2);margin:var(--s-2) 0 0}.rktools .seg{flex:1 1 100%}
 
 /* team page: collapsible sections */
 .fold>summary{display:flex;align-items:baseline;gap:var(--s-2)}
@@ -395,3 +391,20 @@ button.tile.btn b{font:700 22px/1.15 var(--font)}
 .ba.w .bt .chip{box-shadow:inset 0 0 0 1.5px color-mix(in oklab,var(--ink) 35%,transparent)}
 .bmm{margin-top:var(--s-2);font-size:12.5px;line-height:1.5}
 .tiles.t3{grid-template-columns:repeat(3,minmax(0,1fr))}.tiles.t3 .tile{padding:var(--s-2) var(--s-3)}.tiles.t3 .tile b{font-size:20px}.tiles.t3 .tile small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* rankings, like the VEX Events app: a card per team */
+.rkcard .seg{margin:var(--s-2) 0 var(--s-1)}
+.rklist{margin:var(--s-2) calc(-1 * var(--s-2)) 0}
+.rkrow{display:grid;grid-template-columns:3.4rem minmax(0,1fr);grid-template-areas:"name name" "rank stats";column-gap:var(--s-3);row-gap:3px;padding:var(--s-3) var(--s-2);border-top:1px solid var(--hairline);cursor:pointer;font-variant-numeric:tabular-nums}
+.rkrow:first-child{border-top:0}
+.rkrow:hover{background:var(--surface-raised)}
+.rkrow.us{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent);border-radius:var(--r-sm)}
+.rkname{grid-area:name;display:flex;align-items:baseline;gap:var(--s-2);min-width:0}
+.rkname .num{font-size:17px;flex:none}
+.rkname span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rkrank{grid-area:rank;display:flex;flex-direction:column;line-height:1.25}
+.rkrank b{font-size:16px}.rkrank small{font-size:12px;color:var(--ink-muted);white-space:nowrap}
+.rkstats{grid-area:stats;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:var(--s-2);row-gap:3px;font-size:14px;line-height:1.3}
+.rkstats span{color:var(--ink-muted);white-space:nowrap}
+.rkstats b{color:var(--ink);font-weight:700}
+.rkstats span:nth-child(3n+2){text-align:center}.rkstats span:nth-child(3n){text-align:right}
