@@ -429,7 +429,7 @@ function ghostGo(g, dir, d) {
 const slideIn = (el, dir, d) => el.animate([{ transform: `translateX(${dir * d}px)` }, { transform: 'none' }], { duration: SLIDE_MS, easing: SLIDE_EASE, fill: 'backwards' });
 
 // Segmented controls: one highlight that glides to the chosen item, and the content under it slides the way you went.
-const SEG_SLIDE = new Set(['mfilter', 'sfilter', 'tview', 'sksope', 'ebscope', 'wmode']);
+const SEG_SLIDE = new Set(['rkview', 'mfilter', 'sfilter', 'tview', 'sksope', 'ebscope', 'wmode']);
 const segBtns = s => [...s.querySelectorAll(':scope > button')];
 function segSnap() {
   const m = {};
@@ -504,10 +504,12 @@ function render() {
   if (mTeam && !modalShown) { md.style.display = 'block'; if (!reduced()) replay(md, 'opening') }
   else if (!mTeam) md.style.display = 'none';
   modalShown = !!mTeam;
-  if (tab === 'scout' && scTeam && draft && !spec && scTeam !== US && signedIn()) phLoad(scTeam);
+  if (mTeam && mTeam[0] !== ':' && !spec && mTeam !== US && signedIn()) phLoad(mTeam);
+  else if (tab === 'scout' && scTeam && draft && !spec && scTeam !== US && signedIn()) phLoad(scTeam);
   seenNotes = new Set(S.notes.map(n => n.id));
   renderedAt = performance.now();
   ebKick();
+  if (tab === 'matches' && mf === 'bracket') requestAnimationFrame(() => requestAnimationFrame(brkLines));
 }
 function closeModal() {
   const md = $('#modal');
@@ -753,21 +755,41 @@ function vTeamList() {
   ${spec ? '' : `<details class="card" id="d-addteam" ${det('d-addteam', !ts.length)}><summary><h2>Add a team manually</h2></summary><div class="row"><input id="t_n" placeholder="Number e.g. 52111A" aria-label="Team number"><input id="t_name" placeholder="Team name" aria-label="Team name"><input id="t_s" placeholder="School" aria-label="School"><button class="p" data-act="addteam">Add</button></div></details>`}`;
 }
 
-// Rankings, laid out like the VEX Events app: one card per team (number and name; rank and record; then WP / AP / SP and OPR / DPR / CCWM),
-// with Rank / OPR / DPR / CCWM along the top to choose how the list is sorted. A lower DPR is better, so DPR sorts the other way.
+// Rankings. Four layouts to try (the Layout row is temporary, so the best one can be kept): "vex" = like the VEX Events app, "compact" = dense text
+// lines, "table" = one row per team with every number, "bars" = the numbers as small bars you can compare at a glance.
+let rkv = ls('rkv') || 'vex';
 function vRank() {
   const st = stats(), rows = [...st.by.entries()].map(([team, r]) => ({ ...r, team }));
   if (!rows.length) return '<div class="card"><h2>Rankings</h2><p class="mut">No qualification matches have been scored yet. Rankings and OPR show up here once they are.</p></div>';
-  const by = ['rank', 'opr', 'dpr', 'ccwm'].includes(rks) ? rks : 'rank';
+  const by = ['rank', 'opr', 'dpr', 'ccwm'].includes(rks) ? rks : 'rank', view = ['vex', 'compact', 'table', 'bars'].includes(rkv) ? rkv : 'vex';
   const cmp = { rank: (a, b) => (a.div || 0) - (b.div || 0) || a.rank - b.rank, opr: (a, b) => (b.opr ?? -1e9) - (a.opr ?? -1e9), dpr: (a, b) => (a.dpr ?? 1e9) - (b.dpr ?? 1e9), ccwm: (a, b) => (b.ccwm ?? -1e9) - (a.ccwm ?? -1e9) }[by];
   rows.sort(cmp);
+  const rk = r => (st.multiDiv ? 'D' + r.div + '·' : '') + (r.rank ?? '–'), nm = r => esc(tName(r.team));
+  const open = (r, cls_) => `<div class="${cls_} ${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}" role="button" tabindex="0">`;
   const stat = (v, l) => `<span><b>${v}</b> ${l}</span>`;
+  let list;
+  if (view === 'vex') list = `<div class="rklist">${rows.map(r => `${open(r, 'rkrow')}
+    <div class="rkname"><b class="num">${esc(r.team)}</b><span>${nm(r)}</span></div>
+    <div class="rkrank"><b>${rk(r)}</b><small>(${rec(r)})</small></div>
+    <div class="rkstats">${stat(r.wp ?? '–', 'WP')}${stat(r.ap ?? '–', 'AP')}${stat(r.sp ?? '–', 'SP')}${stat(f1(r.opr), 'OPR')}${stat(f1(r.dpr), 'DPR')}${stat(sgn(r.ccwm), 'CCWM')}</div></div>`).join('')}</div>`;
+  else if (view === 'compact') list = `<div class="rklist">${rows.map(r => `${open(r, 'rkc')}<span class="rkbadge">${rk(r)}</span><div class="rkcm">
+    <div class="rkc1"><b class="num">${esc(r.team)}</b><span class="nm">${nm(r)}</span><span class="wp"><b>${r.wp ?? '–'}</b> WP</span></div>
+    <div class="rkc2">${rec(r)} · <b>${r.ap ?? '–'}</b> AP · <b>${r.sp ?? '–'}</b> SP</div>
+    <div class="rkc3"><b>${f1(r.opr)}</b> OPR · <b>${f1(r.dpr)}</b> DPR · <b>${sgn(r.ccwm)}</b> CCWM</div></div></div>`).join('')}</div>`;
+  else if (view === 'table') list = `<div class="tblwrap"><table class="rk rkt"><thead><tr><th>#</th><th>Team</th><th>W-L-T</th><th>WP</th><th>AP</th><th>SP</th><th>OPR</th><th>DPR</th><th>CCWM</th></tr></thead><tbody>${rows.map(r => `<tr class="${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}" role="button" tabindex="0"><td>${rk(r)}</td><td><b>${esc(r.team)}</b></td><td>${rec(r)}</td><td>${r.wp ?? '–'}</td><td>${r.ap ?? '–'}</td><td>${r.sp ?? '–'}</td><td>${f1(r.opr)}</td><td>${f1(r.dpr)}</td><td>${sgn(r.ccwm)}</td></tr>`).join('')}</tbody></table></div>`;
+  else {
+    const mx = k => Math.max(1, ...rows.map(r => Math.abs(r[k] ?? 0))), mo = mx('opr'), md = mx('dpr'), mc = mx('ccwm');
+    const bar = (label, v, txt, frac, kind) => `<div class="bar"><span class="bl">${label}</span><span class="bt ${kind || ''}"><i style="${kind === 'dual' ? (v >= 0 ? `left:50%;width:${Math.min(50, Math.abs(frac) * 50)}%` : `right:50%;width:${Math.min(50, Math.abs(frac) * 50)}%`) : `width:${Math.max(2, Math.min(100, frac * 100))}%`}" class="${kind === 'dual' ? (v >= 0 ? 'pos' : 'neg') : ''}"></i></span><b class="bv">${txt}</b></div>`;
+    list = `<div class="rklist">${rows.map(r => `${open(r, 'rkb')}<span class="rkbadge">${rk(r)}</span><div class="rkcm">
+      <div class="rkc1"><b class="num">${esc(r.team)}</b><span class="nm">${nm(r)}</span></div>
+      <div class="rkc2">${rec(r)} · <b>${r.wp ?? '–'}</b> WP · <b>${r.ap ?? '–'}</b> AP · <b>${r.sp ?? '–'}</b> SP</div>
+      <div class="bars">${bar('OPR', r.opr, f1(r.opr), Math.max(0, r.opr ?? 0) / mo)}${bar('DPR', r.dpr, f1(r.dpr), Math.max(0, r.dpr ?? 0) / md, 'low')}${bar('CCWM', r.ccwm ?? 0, sgn(r.ccwm), (r.ccwm ?? 0) / mc, 'dual')}</div></div></div>`).join('')}</div>`;
+  }
   return `<div class="card rkcard"><h2>Rankings</h2><p class="mut">${st.official ? 'Official rankings from VEX Events.' : 'Calculated from qualification scores (win points, then OPR). Official rankings replace these once VEX Events has them.'} Sort by:</p>
   ${segBar([['rank', 'Rank'], ['opr', 'OPR'], ['dpr', 'DPR'], ['ccwm', 'CCWM']], by, 'rksort')}
-  <div class="rklist">${rows.map(r => `<div class="rkrow ${r.team === US ? 'us' : ''}" data-act="team" data-t="${esc(r.team)}" data-flip="${esc(r.team)}" role="button" tabindex="0">
-    <div class="rkname"><b class="num">${esc(r.team)}</b><span>${esc(tName(r.team))}</span></div>
-    <div class="rkrank"><b>${st.multiDiv ? 'D' + r.div + '·' : ''}${r.rank ?? '–'}</b><small>(${rec(r)})</small></div>
-    <div class="rkstats">${stat(r.wp ?? '–', 'WP')}${stat(r.ap ?? '–', 'AP')}${stat(r.sp ?? '–', 'SP')}${stat(f1(r.opr), 'OPR')}${stat(f1(r.dpr), 'DPR')}${stat(sgn(r.ccwm), 'CCWM')}</div></div>`).join('')}</div>
+  <p class="mut rklay">Trying layouts, pick the one you like:</p>
+  ${segBar([['vex', 'VEX'], ['compact', 'Compact'], ['table', 'Table'], ['bars', 'Bars']], view, 'rkview')}
+  ${list}
   <p class="mut"><b>WP</b> win points (2 for a win, 1 for a tie). <b>AP</b> autonomous points, the first tiebreaker. <b>SP</b> strength of schedule points, the next tiebreaker: the losing alliance’s score in each of the team’s matches, added up. ${st.official ? '' : 'AP and SP only show once VEX Events has official rankings. '}<b>OPR</b> ≈ points a team adds to its alliance, <b>DPR</b> ≈ points the other alliance scores against it (lower is better), <b>CCWM</b> = OPR − DPR. Average and high score are on each team’s page.</p></div>`;
 }
 
@@ -895,12 +917,14 @@ function sideBox(m, c, label, arr, col, mine) {
 }
 let mnames = ls('mnames') === '1'; // show each team's name under its number on match cards
 document.body.classList.toggle('mnames', mnames); // the names are always in the card; this class opens them (animated, growing downward)
-const chips = (m, arr) => arr.map(n => `<button class="chip mc ${n === US ? 'me' : cls(m, n)}" data-act="team" data-t="${n}">${n}<span class="nmw"><small>${esc(tName(n)) || '&nbsp;'}</small></span></button>`).join('');
+const chips = (m, arr) => arr.map(n => `<button class="chip mc ${n === US ? 'me' : ''}" data-act="team" data-t="${n}">${n}<span class="nmw"><small>${esc(tName(n)) || '&nbsp;'}</small></span></button>`).join('');
 // ---------- Bracket ----------
 // Elimination rounds: 6 = round of 16, 3 = quarterfinals, 4 = semifinals, 5 = final. A matchup (a "series") is every match with the same round and
 // slot (inst), numbered by n. VEX Events lists only the matches that exist so far, so the rest of the bracket is drawn as empty slots that fill
 // in as the winners are known: slot k of a round is fed by slots 2k-1 and 2k of the round before.
 const BRK_ROUNDS = [[6, 'Round of 16', 'R16'], [3, 'Quarterfinals', 'QF'], [4, 'Semifinals', 'SF'], [5, 'Final', 'Final']];
+let mfPrev = 'ours'; // where the bracket's Back button goes
+const ser5 = () => series(5, 1, elimMatches());
 const elimMatches = () => matches().filter(m => [3, 4, 5, 6].includes(m.round));
 const slotOf = m => m.inst || +((String(m.label).match(/^(?:R16-|QF|SF)(\d+)-/) || [])[1]) || 1; // older stored matches have no inst: read it from the label
 const numOf = m => m.n || +((String(m.label).match(/-(\d+)$|^F(\d+)$/) || [])[1] || (String(m.label).match(/^F(\d+)$/) || [])[1]) || 1;
@@ -913,6 +937,26 @@ function series(round, inst, all) {
   const won = wa >= need ? 'A' : wb >= need ? 'B' : '';
   return { round, inst, ms, A, B, wa, wb, pts, won, winner: won === 'A' ? A : won === 'B' ? B : null };
 }
+// Arrows from each matchup to the one its winner plays next. Drawn from where the cards really are (so they follow any card height), after the page is built.
+function brkLines() {
+  const wrap = document.querySelector('.brk'); if (!wrap) return;
+  const old = wrap.querySelector('svg.bkl'); if (old) old.remove();
+  const br = wrap.getBoundingClientRect(), sl = wrap.scrollLeft, st = wrap.scrollTop;
+  const pos = el => { const r = el.getBoundingClientRect(); return { l: r.left - br.left + sl, r: r.right - br.left + sl, m: r.top - br.top + st + r.height / 2 } };
+  let out = '';
+  wrap.querySelectorAll('.bs[data-prev]').forEach(t => {
+    const prev = t.dataset.prev; if (!prev) return;
+    const k = +t.dataset.k, tp = pos(t); let any = false;
+    [2 * k - 1, 2 * k].forEach(j => {
+      const f = wrap.querySelector(`.bs[data-r="${prev}"][data-k="${j}"]`); if (!f) return;
+      const fp = pos(f), mid = Math.round((fp.r + tp.l) / 2), on = f.dataset.won === '1'; if (on) any = true;
+      out += `<path class="${on ? 'on' : ''}" d="M${fp.r} ${fp.m}H${mid}V${tp.m}H${tp.l - 7}"/>`;
+    });
+    out += `<path class="head ${any ? 'on' : ''}" d="M${tp.l - 1} ${tp.m}l-8 -4.5v9z"/>`;
+  });
+  wrap.insertAdjacentHTML('afterbegin', `<svg class="bkl" width="${wrap.scrollWidth}" height="${wrap.scrollHeight}" aria-hidden="true">${out}</svg>`);
+}
+window.addEventListener('resize', () => requestAnimationFrame(brkLines));
 function vBracket() {
   const all = elimMatches(); if (!all.length) return '';
   const present = BRK_ROUNDS.filter(([r]) => all.some(m => m.round === r)), first = present[0][0];
@@ -926,32 +970,33 @@ function vBracket() {
     const name = cols.find(c => c[0] === r)[2], title = r === 5 ? 'Final' : name + ' ' + k, sr = ser(r, k), prev = prevOf(r);
     if (!sr) { // not played yet: show who is already through from the matches that feed it
       const feed = (j) => { const p = prev && ser(prev[0], j); return p && p.winner ? `<span class="bt">${teamChips(p.winner)}</span>` : `<span class="bt"><span class="pend">${prev ? 'Winner of ' + (prev[0] === 5 ? 'Final' : prev[2] + ' ' + j) : 'To be decided'}</span></span>` };
-      return `<div class="bs tbd"><div class="bst"><b>${title}</b><span class="mut">Not played yet</span></div><div class="ba">${prev ? feed(2 * k - 1) : '<span class="bt"><span class="pend">To be decided</span></span>'}</div><div class="ba">${prev ? feed(2 * k) : '<span class="bt"><span class="pend">To be decided</span></span>'}</div></div>`;
+      return `<div class="bs tbd" data-r="${r}" data-k="${k}" data-prev="${prev ? prev[0] : ''}" data-won="0"><div class="bst"><b>${title}</b><span class="mut">Not played yet</span></div><div class="ba">${prev ? feed(2 * k - 1) : '<span class="bt"><span class="pend">To be decided</span></span>'}</div><div class="ba">${prev ? feed(2 * k) : '<span class="bt"><span class="pend">To be decided</span></span>'}</div></div>`;
     }
     const multi = sr.ms.length > 1, mine = sr.A.includes(US) || sr.B.includes(US);
     const sa = multi ? sr.wa : sr.pts[0].done ? sr.pts[0].a : '', sb = multi ? sr.wb : sr.pts[0].done ? sr.pts[0].b : '';
     const live = !sr.won && sr.ms.some(m => m.ran) ? 'In progress' : sr.won ? 'Done' : 'Up next';
     const mm = sr.pts.map(x => `${esc(x.m.label)} ${x.done ? `<b>${x.a}–${x.b}</b>` : x.m.ran ? 'in progress' : tOf(x.m.sched) ? 'at ' + esc(tOf(x.m.sched)) : 'to play'}`).join(' · ');
-    return `<div class="bs ${mine ? 'mine' : ''}"><div class="bst"><b>${title}</b><span class="mut">${live}</span></div>
+    return `<div class="bs ${mine ? 'mine' : ''}" data-r="${r}" data-k="${k}" data-prev="${prev ? prev[0] : ''}" data-won="${sr.won ? 1 : 0}"><div class="bst"><b>${title}</b><span class="mut">${live}</span></div>
       <div class="ba ${sr.won === 'A' ? 'w' : ''}"><span class="bt">${teamChips(sr.A)}</span><b class="bsc">${sa}${sr.won === 'A' ? '<i class="sr"> (won)</i>' : ''}</b></div>
       <div class="ba ${sr.won === 'B' ? 'w' : ''}"><span class="bt">${teamChips(sr.B)}</span><b class="bsc">${sb}${sr.won === 'B' ? '<i class="sr"> (won)</i>' : ''}</b></div>
       <div class="bmm mut">${mm}</div></div>`;
   };
   const per = r => { const i = cols.findIndex(c => c[0] === r); return Math.max(1, slots / Math.pow(2, i)) };
   const champ = ser(5, 1) && ser(5, 1).winner;
-  return `<div class="card"><h2>Bracket</h2><p class="mut">The elimination rounds. Winners move right; empty slots fill in as the matches are played.${champ ? ' Champions: <b>' + esc(champ.join(' · ')) + '</b>.' : ''}</p>
+  return `<div class="card"><h2>Bracket</h2><p class="mut">The elimination rounds. Arrows follow the winners; empty slots fill in as the matches are played.${champ ? ' Champions: <b>' + esc(champ.join(' · ')) + '</b>.' : ''}</p>
   <div class="brk">${cols.map(([r, label]) => `<div class="bcol"><h3>${label}</h3><div class="bslots">${Array.from({ length: per(r) }, (_, i) => card(r, i + 1)).join('')}</div></div>`).join('')}</div></div>`;
 }
 function vMatches() {
   if (!evObj()) return empty('Pick an event first.');
-  const hasElim = elimMatches().length > 0; if (mf === 'bracket' && !hasElim) mf = 'ours';
+  const hasElim = elimMatches().length > 0; if (mf === 'bracket' && !hasElim) mf = mfPrev;
   const all = matches(), inT = m => m.red.includes(mfT) || m.blue.includes(mfT), list = mf === 'bracket' ? [] : mf === 'all' ? all : mf === 'team' ? (mfT ? all.filter(inT) : []) : all.filter(m => side(m));
   const st = stats(), me = st.by.get(US), playedN = all.filter(m => side(m) && scored(m)).length;
   const rankChip = me && me.rank != null ? `<span class="hchip">Rank ${me.rank} of ${teams().length}</span>` : '';
+  if (mf === 'bracket') return `<button class="link back" data-act="bkback">‹ Matches</button>${vBracket()}`; // the bracket gets the whole page, with a way back
+  const finals = elimMatches().length ? ser5() : null;
   let h = `<section class="panel">${recStat(all.filter(m => side(m)))}</section>` +
-    segBar([['ours', spec ? US : 'Our matches'], ['all', 'All matches'], ['team', 'By team'], ...(hasElim ? [['bracket', 'Bracket']] : [])], mf, 'mfilter') +
-    (mf === 'bracket' ? vBracket() : '') +
-    (mf === 'bracket' ? '' : `<div class="mtools"><button class="chip ${mnames ? 'on' : ''}" data-act="mnames" aria-pressed="${mnames}">Team names</button></div>`);
+    segBar([['ours', spec ? US : 'Our matches'], ['all', 'All matches'], ['team', 'By team']], mf, 'mfilter') +
+    `<div class="mtools ${hasElim ? 'two' : ''}">${hasElim ? `<button class="bnote" data-act="bkopen">${IC_RANK}<span><b>${finals && finals.winner ? 'Finals are over' : 'Finals bracket is out'}</b></span><i aria-hidden="true">›</i></button>` : ''}<button class="chip ${mnames ? 'on' : ''}" data-act="mnames" aria-pressed="${mnames}">Team names</button></div>`;
   let tw = 0, tl = 0, tt = 0;
   if (mf === 'team') {
     h += `<div class="card mteam">${dd('mft', mfT, [['', 'Pick a team…'], ...teams().map(t => [t.number, t.number + ' · ' + t.name])], { value: mfT, label: 'Team to show matches for' })}</div>`;
@@ -1160,6 +1205,8 @@ function photosInner(num) {
   <div class="foot"><button data-act="phgal" data-t="${t}" ${full ? 'disabled' : ''}>From gallery</button><button data-act="phcam" data-t="${t}" ${full ? 'disabled' : ''}>Take photo</button></div>`;
 }
 const photosNote = 'Up to 3 per team. Photos are kept for your 5 most recent events, then removed.';
+// On a team's page: the robot photos taken while scouting, to look at (tap for full size). Adding and deleting happen in the scouting form.
+const photosStrip = num => { const ph = phList(num); return ph.length ? `<div class="phstrip" aria-label="Robot photos">${ph.map(p => `<button type="button" class="phimg" data-act="phview" data-id="${esc(p.id)}" data-t="${esc(num)}" aria-label="View robot photo"><img src="${p.img}" alt="Robot photo of team ${esc(num)}" loading="lazy">${p.wait ? '<span class="phwait">Waiting to send</span>' : ''}</button>`).join('')}</div>` : '' };
 // In the scouting form: a block inside the Robot section.
 const photosField = num => `<div class="ff"><div class="lbl">Robot photos</div><div class="mut hint">Take a picture of their robot. ${photosNote}</div>${photosInner(num)}</div>`;
 
@@ -1195,11 +1242,26 @@ function seasonCard(num) {
   <h3>Awards</h3>${(s.aw || []).map(a => `<div class="award"><b>${esc(a[0])}</b>${a[1] ? `<div class="mut">${esc(a[1])}</div>` : ''}</div>`).join('') || '<p class="mut">No awards this season.</p>'}`, false);
 }
 
+// A team's matches in plain words: the next one (and whether it is with or against us), how many they won and lost, and which matches we share.
+function teamMatches(num) {
+  const ms = matches().filter(m => m.red.includes(num) || m.blue.includes(num)); if (!ms.length) return { body: '<span class="mut">No matches yet.</span>', sub: '' };
+  const played = ms.filter(scored), upcoming = ms.filter(m => !scored(m)), next = upcoming[0];
+  const won = played.filter(m => (m.red.includes(num) ? m.rs - m.bs : m.bs - m.rs) > 0).length, tied = played.filter(m => m.rs === m.bs).length, lost = played.length - won - tied;
+  const who = spec ? esc(US) : 'us', rel = m => { const r = side(m, num); return r === 'ally' ? 'with ' + who : r === 'opp' ? 'against ' + who : '' };
+  const away = next ? matches().filter(m => !scored(m)).indexOf(next) : -1;
+  const nextSub = next ? [away <= 0 ? 'up next' : 'in ' + away + (away === 1 ? ' match' : ' matches'), tOf(next.sched), rel(next)].filter(Boolean).join(' · ') : 'all played';
+  const withUs = ms.filter(m => side(m, num) === 'ally'), against = ms.filter(m => side(m, num) === 'opp');
+  const lab = a => a.map(m => `<button class="chip" data-act="mteam" data-t="${esc(num)}" data-id="${esc(m.id)}">${esc(m.label)}</button>`).join('');
+  const rows = [withUs.length ? `<div class="trel"><span>With ${who}</span><div>${lab(withUs)}</div></div>` : '', against.length ? `<div class="trel"><span>Against ${who}</span><div>${lab(against)}</div></div>` : ''].join('');
+  const body = tiles([[next ? esc(next.label) : '–', 'Next match', esc(nextSub)], [won + '–' + lost + (tied ? '–' + tied : ''), 'Won–lost', 'of ' + played.length + ' played'], [ms.length, 'Matches', upcoming.length + ' to play']], 't3') +
+    (rows ? `<div class="trels">${rows}</div>` : (spec ? '' : `<p class="mut">No matches with or against us.</p>`)) +
+    `<details class="sub" id="d-tallm" ${det('d-tallm', false)}><summary>All ${ms.length} matches</summary><div class="chips">${ms.map(m => `<button class="chip" data-act="mteam" data-t="${esc(num)}" data-id="${esc(m.id)}" aria-label="Show ${esc(m.label)} in ${esc(num)}’s matches">${esc(m.label)}</button>`).join('')}</div></details>`;
+  return { body, sub: next ? 'Next ' + next.label + (played.length ? ' · ' + won + '–' + lost : '') : played.length ? won + '–' + lost : '' };
+}
 function vTeam(num) {
   const head = (title, sub, act) => `<div class="sheethead"><div class="grow"><h2>${title}</h2>${sub ? `<div class="mut">${sub}</div>` : ''}</div>${act || ''}<button data-act="close">Close</button></div>`;
   const ms = matches().filter(m => m.red.includes(num) || m.blue.includes(num));
-  const matchChips = ms.map(m => `<button class="chip ${side(m, num) === 'ally' ? 'gn' : side(m, num) === 'opp' ? 'rd' : ''}" data-act="mteam" data-t="${esc(num)}" data-id="${esc(m.id)}" aria-label="Show ${esc(m.label)} in ${esc(num)}’s matches">${esc(m.label)}</button>`).join('') || '<span class="mut">None</span>';
-  const matchesCard = fold('d-tmatches', 'Matches', matchChips, false, ms.length ? String(ms.length) : '');
+  const tm = teamMatches(num), matchesCard = fold('d-tmatches', 'Matches', tm.body, false, tm.sub);
   if (spec) { // spectators get the public side only: this event, season stats and matches. No scouting, notes or picklist.
     const t = teams().find(x => x.number === num) || { number: num, name: '', school: '' };
     return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) + eventCard(num) + matchesCard + seasonCard(num);
@@ -1211,9 +1273,9 @@ function vTeam(num) {
   const avgBody = `<p class="mut">From ${sc.length} ${sc.length === 1 ? 'entry' : 'entries'}. Ratings are out of 5.</p>${sc.length ? tiles([[avg('autoPts'), 'Auto points'], [avg('driver'), 'Driver skill'], [avg('speed'), 'Speed'], [avg('scoring'), 'Scoring'], [avg('scoreSpeed'), 'Scoring speed'], [(c => c === '-' ? c : c + ' s')(avg('cycleTime')), 'Cycle time'], [avg('durability'), 'Durability'], [avg('overall'), 'Overall'], [(v => v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '-')(sc.map(x => suggest(x)).filter(Boolean).map(g => g.avg)), 'Suggested overall', 'average of the ratings']]) : ''}`;
   const entriesBody = `${sc.map(s => sum(s)).join('') || '<span class="mut">None yet</span>'}${qn.length ? `<h3>Older quick notes</h3>${qn.map(noteRow).join('')}` : ''}<div class="foot">${sc.length ? `<button class="d" data-act="clearscout" data-t="${num}">Clear all scouting entries</button>` : ''}${qn.length ? `<button class="d" data-act="clearnotes" data-t="${num}">Clear older quick notes</button>` : ''}</div>`;
   return head(`<span class="num">${esc(num)}</span> ${esc(t.name)}`, esc(t.school)) + `<button class="p wide" data-act="scoutfrom" data-t="${esc(num)}">Scout this team</button>
+  ${photosStrip(num)}
   ${eventCard(num)}
-  ${fold('d-tavg', 'Scouting averages', avgBody, true, sc.length ? sc.length + (sc.length === 1 ? ' entry' : ' entries') : '')}
-  ${fold('d-tentries', 'Scouting entries', entriesBody, false, sc.length ? String(sc.length) : '')}
+  ${fold('d-tavg', 'Scouting', avgBody + `<details class="sub" id="d-tentries" ${det('d-tentries', false)}><summary>Scouting entries${sc.length || qn.length ? ' (' + (sc.length + qn.length) + ')' : ''}</summary>${entriesBody}</details>`, true, sc.length ? sc.length + (sc.length === 1 ? ' entry' : ' entries') : '')}
   ${matchesCard}
   ${seasonCard(num)}
   ${fold('d-treq', 'Alliance requests', rq.map(n => `<div class="note">${esc(n.text)}</div>`).join('') || '<span class="mut">None</span>', false, rq.length ? String(rq.length) : '')}
@@ -1461,7 +1523,7 @@ document.addEventListener('click', e => {
   else if (a === 'gorank') { tab = 'event'; ls('tab', tab); tv = 'rank'; ls('tv', tv); navAnim = 'fwd'; render(); const r = document.querySelector('#app tr.us'); if (r) setTimeout(() => { r.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); flash(r) }, 120) }
   else if (a === 'goteamrank') { // the Rank tile on a team's page: open Rankings and scroll to that team's row
     const t = b.dataset.t, already = tab === 'event' && tv === 'rank'; mTeam = null; tab = 'event'; ls('tab', tab); tv = 'rank'; ls('tv', tv); navAnim = 'fwd'; render();
-    const r = [...document.querySelectorAll('#app .rkrow[data-t]')].find(x => x.dataset.t === t); if (r) setTimeout(() => { r.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); flash(r) }, already ? SLIDE_MS + 150 : 150) // already here: wait for the scroll-keeping redraw to finish;
+    const r = [...document.querySelectorAll('#app .rklist [data-t], #app .rkt tr[data-t]')].find(x => x.dataset.t === t); if (r) setTimeout(() => { r.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); flash(r) }, already ? SLIDE_MS + 150 : 150) // already here: wait for the scroll-keeping redraw to finish;
   }
   else if (a === 'mteam') { // a match chip on a team's page: open Matches > By team with that team picked, scrolled to that match
     const t = b.dataset.t, id = b.dataset.id, already = tab === 'matches' && mf === 'team' && mfT === t; mTeam = null; tab = 'matches'; ls('tab', tab); mf = 'team'; ls('mf', mf); mfT = t; ls('mft', mfT); navAnim = 'fwd'; render();
@@ -1469,6 +1531,9 @@ document.addEventListener('click', e => {
   }
   else if (a === 'gomatch') { const id = b.dataset.id; tab = 'matches'; ls('tab', tab); mf = 'ours'; ls('mf', mf); open[id] = true; justOpened = id; navAnim = 'fwd'; render(); const c = document.querySelector(`#app .mhead[data-id="${id}"]`); if (c) setTimeout(() => { c.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); flash(c.closest('.card')) }, 120) }
   else if (a === 'tview') { tv = b.dataset.v; ls('tv', tv); navAnim = 'seg'; render() }
+  else if (a === 'bkopen') { mfPrev = mf === 'bracket' ? 'ours' : mf; mf = 'bracket'; ls('mf', mf); navAnim = 'fwd'; render() }
+  else if (a === 'bkback') { mf = mfPrev || 'ours'; ls('mf', mf); navAnim = 'back'; render() }
+  else if (a === 'rkview') { rkv = b.dataset.v; ls('rkv', rkv); render() }
   else if (a === 'rksort') { rks = b.dataset.v; ls('rks', rks); render() }
   else if (a === 'sksope') { sks = b.dataset.v; ls('sks', sks); render() }
   else if (a === 'sksort') { sko = b.dataset.v; ls('sko', sko); render() }

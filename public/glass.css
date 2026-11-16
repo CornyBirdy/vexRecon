@@ -373,7 +373,7 @@ button.tile.btn:hover{background:color-mix(in srgb,var(--field),var(--ink) var(-
 button.tile.btn b{font:700 22px/1.15 var(--font)}
 
 /* bracket: one column per round, matchups spread evenly so each lines up between the two that feed it */
-.brk{display:flex;gap:var(--s-3);overflow-x:auto;scroll-snap-type:x proximity;margin:var(--s-3) calc(-1 * var(--s-3)) 0;padding:0 var(--s-3) var(--s-3)}
+.brk{position:relative;display:flex;gap:34px;overflow-x:auto;scroll-snap-type:x proximity;margin:var(--s-3) calc(-1 * var(--s-3)) 0;padding:0 var(--s-3) var(--s-3)}
 .bcol{flex:0 0 min(80vw,270px);display:flex;flex-direction:column;scroll-snap-align:start}
 .bcol>h3{margin:0 0 var(--s-2);font-size:13px;color:var(--ink-muted);font-weight:700}
 .bslots{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:var(--s-3)}
@@ -390,7 +390,7 @@ button.tile.btn b{font:700 22px/1.15 var(--font)}
 .ba.w .bsc{font-size:24px;font-weight:700;color:var(--ink)}
 .ba.w .bt .chip{box-shadow:inset 0 0 0 1.5px color-mix(in oklab,var(--ink) 35%,transparent)}
 .bmm{margin-top:var(--s-2);font-size:12.5px;line-height:1.5}
-.tiles.t3{grid-template-columns:repeat(3,minmax(0,1fr))}.tiles.t3 .tile{padding:var(--s-2) var(--s-3)}.tiles.t3 .tile b{font-size:20px}.tiles.t3 .tile small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tiles.t3{grid-template-columns:repeat(3,minmax(0,1fr))}.tiles.t3 .tile{padding:var(--s-2) var(--s-3)}.tiles.t3 .tile b{font-size:20px}.tiles.t3 .tile small{line-height:1.3}
 
 /* rankings, like the VEX Events app: a card per team */
 .rkcard .seg{margin:var(--s-2) 0 var(--s-1)}
@@ -408,3 +408,46 @@ button.tile.btn b{font:700 22px/1.15 var(--font)}
 .rkstats span{color:var(--ink-muted);white-space:nowrap}
 .rkstats b{color:var(--ink);font-weight:700}
 .rkstats span:nth-child(3n+2){text-align:center}.rkstats span:nth-child(3n){text-align:right}
+.bkl{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+.bkl path{fill:none;stroke:color-mix(in oklab,var(--ink) 26%,transparent);stroke-width:1.5;stroke-linejoin:round}
+.bkl path.on{stroke:color-mix(in oklab,var(--ink) 70%,transparent)}
+.bkl path.head{fill:color-mix(in oklab,var(--ink) 26%,transparent);stroke:none}.bkl path.head.on{fill:color-mix(in oklab,var(--ink) 70%,transparent)}
+.bcol,.bs{position:relative;z-index:1}
+/* the finals notice at the top of Matches, in the empty space beside the Team names button */
+.mtools.two{justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--s-2)}
+.bnote{display:inline-flex;align-items:center;gap:8px;min-height:0;padding:7px 12px;border-radius:999px;border:0;background:var(--accent-soft);color:var(--accent-text);font:inherit;font-size:14px;box-shadow:inset 0 0 0 1.5px color-mix(in oklab,var(--accent) 40%,transparent);text-align:left}
+.bnote svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.bnote span{font-weight:500}.bnote b{font-weight:700}.bnote i{font-style:normal;font-size:18px;line-height:1;margin-left:2px}
+
+/* rankings: the other layouts */
+.rklay{margin:var(--s-3) 0 var(--s-1);font-size:12.5px}
+.rkbadge{flex:none;display:grid;place-items:center;min-width:34px;height:34px;padding:0 4px;border-radius:var(--r-sm);background:var(--field);font:700 15px/1 var(--font);font-variant-numeric:tabular-nums}
+.rkc,.rkb{display:flex;gap:var(--s-3);align-items:flex-start;padding:var(--s-3) var(--s-2);border-top:1px solid var(--hairline);cursor:pointer;font-variant-numeric:tabular-nums}
+.rkc:first-child,.rkb:first-child{border-top:0}
+.rkc:hover,.rkb:hover{background:var(--surface-raised)}
+.rkc.us,.rkb.us{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent);border-radius:var(--r-sm)}
+.rkcm{flex:1;min-width:0;display:grid;gap:3px}
+.rkc1{display:flex;align-items:baseline;gap:var(--s-2);min-width:0}
+.rkc1 .num{font-size:17px;flex:none}.rkc1 .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rkc1 .wp{flex:none;color:var(--ink-muted);font-size:14px}.rkc1 .wp b{color:var(--ink);font-size:18px}
+.rkc2,.rkc3{font-size:13.5px;color:var(--ink-muted);line-height:1.35}.rkc2 b,.rkc3 b{color:var(--ink);font-weight:700}
+.rkt{font-size:13px}.rkt th,.rkt td{padding-left:7px;padding-right:7px}
+.rkt th:nth-child(2),.rkt td:nth-child(2){position:sticky;left:0;background:var(--card);z-index:1}
+.rkt tr.us td{background:var(--accent-soft)}.rkt tr.us td:nth-child(2){background:color-mix(in srgb,var(--accent-soft),var(--card))}
+.bars{display:grid;gap:5px;margin-top:3px}
+.bar{display:grid;grid-template-columns:3.1em 1fr 3.6em;align-items:center;gap:var(--s-2);font-size:12.5px}
+.bar .bl{color:var(--ink-muted)}.bar .bv{text-align:right;font-size:13px}
+.bar .bt{position:relative;height:7px;border-radius:4px;background:var(--field);overflow:hidden}
+.bar .bt i{position:absolute;top:0;bottom:0;left:0;border-radius:4px;background:color-mix(in oklab,var(--accent) 80%,transparent)}
+.bar .bt.low i{background:color-mix(in oklab,var(--ink) 38%,transparent)}
+.bar .bt.dual::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--hairline)}
+.bar .bt.dual i{left:auto}.bar .bt.dual i.pos{background:var(--success)}.bar .bt.dual i.neg{background:var(--danger)}
+
+/* team page: robot photos strip, matches summary */
+.phstrip{display:flex;gap:var(--s-2);margin:var(--s-3) 0 0}
+.phstrip .phimg{position:relative;flex:1 1 0;max-width:140px;aspect-ratio:1;padding:0;min-height:0;border:0;border-radius:var(--r-md);overflow:hidden;background:var(--field);box-shadow:inset 0 0 0 1px var(--hairline)}
+.phstrip .phimg img{display:block;width:100%;height:100%;object-fit:cover}
+.phstrip .phwait{position:absolute;left:4px;right:4px;bottom:4px;padding:2px 4px;border-radius:var(--r-xs);background:var(--surface);color:var(--ink);font-size:11px;text-align:center}
+.trels{display:grid;gap:var(--s-2);margin:var(--s-2) 0}
+.trel{display:flex;align-items:center;gap:var(--s-3);font-size:13.5px}.trel>span{flex:none;min-width:7.5em;color:var(--ink-muted);font-weight:600}.trel>div{display:flex;flex-wrap:wrap;gap:4px}.trel .chip{margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:var(--s-2)}.chips .chip{margin:0}
