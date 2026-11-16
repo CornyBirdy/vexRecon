@@ -12,7 +12,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const norm = s => String(s || '').trim().toUpperCase().replace(/\s+/g, '');
 const slug = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-const APP = { name: 'Recon', version: '1.1.0' };
+const APP = { name: 'Recon', version: '1.2.0' };
 // Signed in as one team: its number is "us" everywhere. Scout names are the team's own list (Team settings).
 let US = '', NAMES = [];
 const COLS = ['events', 'teams', 'matches', 'notes', 'config', 'rankings', 'stats'];
@@ -541,6 +541,12 @@ const settingsCard = () => `<details class="card" id="d-settings" ${det('d-setti
   <div class="foot"><span class="grow"></span><button class="d" data-act="logout">Log out</button></div></details>`;
 // What's new, in plain words (the full history is CHANGELOG.md). Newest first; add a line here when something users will notice changes.
 const CHANGES = [
+  ['1.2.0', [
+    'Robot photos: when you scout a team, add up to 3 photos of its robot from the camera or gallery. They’re shared with your team, show on the team’s page, and wait to send if you’re offline. Photos are kept for your 5 most recent events.',
+    'Agenda: the Event home has a schedule timeline (registration, inspection, matches begin…) with a Now marker. Your team adds the items; spectators can read it.',
+    'A Team names button on the Matches tab shows each team’s name under its number.',
+    'The picklist’s Still to pick list shows team names too.',
+    'Less empty space under the event bar on the Event home.']],
   ['1.1.0', [
     'Spectator mode: on the sign-in screen, choose Spectator and enter a team number (no code) to follow its matches, rankings, OPR and skills, view-only. Scouting notes and the picklist stay private, and a team can turn it off in Team settings.',
     'Matches show their scheduled time and which field they’re on, in the match list and on the Next match card.',

@@ -6,6 +6,8 @@ All notable changes to Recon (made by Invictus 52111A). Newest first. The format
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-16: Robot photos, Agenda, team names
+
 ### Added
 - **Team names on the match lists.** A new **Team names** button on the Matches tab shows each team's name under its number on every match card (and on the Next match card). It remembers your choice.
 - **Agenda.** The Event home now has an **Agenda** card: the day's schedule as a timeline (registration, inspection, opening ceremony, matches begin, lunch, awards...) with a **Now** marker on whatever is happening, and finished items dimmed. Tap **Add** (or **Edit**) to fill it in: pick the day and time, then type what happens or choose a suggestion, with an optional note. It's shared live with your whole team, works offline, and spectators can see it too (they can't change it). Multi-day events list each day. VEX Events doesn't give us the agenda, so your team types it in once.
